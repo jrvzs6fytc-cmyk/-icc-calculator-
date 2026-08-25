@@ -19,75 +19,219 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
 .info{font-size:14px;color:#637085;text-align:center}
 .matrix{overflow:auto}.matrix table{border-collapse:collapse;width:100%;min-width:700px}.matrix th,.matrix td{padding:8px;border:1px solid #d7dee8;text-align:center}.matrix th{background:#edf3f8}
 .note{font-size:13px;color:#667085;line-height:1.45}
+.badge{display:inline-block;background:#dff1e3;color:#245c35;padding:7px 12px;border-radius:999px;font-weight:700;font-size:13px;margin-top:8px}
+.warn{color:#9b4b13;background:#fff4e8;border-left:4px solid #e57a2f}
 @media(max-width:700px){.grid{grid-template-columns:1fr 1fr}.value{font-size:42px}}
 </style>
 </head>
 <body>
-<header><h1>⚡ Icc Calculator</h1><div class="sub">230/400 V triphasé</div></header>
+<header><h1>⚡ Icc Calculator</h1><div class="sub">230/400 V triphasé • méthode Schneider G39</div></header>
 <main>
 <div class="card">
 <div class="grid">
 <div><label for="material">Conducteur</label><select id="material"><option value="Cu">Cuivre</option><option value="Al">Aluminium</option></select></div>
 <div><label for="section">Section</label><select id="section"></select></div>
-<div><label for="icc">Icc amont (kA)</label><input id="icc" type="number" min="1" max="100" step="0.1" value="28"></div>
-<div><label for="length">Longueur (m)</label><input id="length" type="number" min="0" max="500" step="1" value="29"></div>
+<div><label for="icc">Icc amont (kA)</label><input id="icc" type="number" min="1" max="100" step="0.1" value="25"></div>
+<div><label for="length">Longueur (m)</label><input id="length" type="number" min="0" max="1000" step="0.1" value="30"></div>
 </div>
 </div>
+
 <div class="card result">
 <small>ICC EN BOUT DE LIGNE</small>
 <div class="value" id="result">—</div>
 <div id="details"></div>
+<div class="badge">Mode Schneider strict</div>
 </div>
+
 <div class="card">
-<label for="matrixIcc">Matrice rapide – Icc amont</label>
+<label for="matrixIcc">Matrice rapide – Icc amont retenu</label>
 <select id="matrixIcc"></select>
 <div class="matrix" id="matrix"></div>
 </div>
+
 <div class="card note">
-<b>Version prototype fonctionnelle.</b> Le calcul utilise la composition d'impédances (source + conducteur). La prochaine étape est d'intégrer exactement les tables G39 fournies afin d'obtenir la reproduction stricte des valeurs tabulées Schneider.
+<b>Lecture fidèle de la méthode de composition Schneider.</b>
+La longueur est sélectionnée par défaut dans la ligne de la section, puis l'Icc amont est retenu par excès dans la table centrale.
+La valeur affichée est la valeur tabulée correspondante. L'ancienne version utilisait une formule d'impédance simplifiée : elle pouvait être cohérente physiquement sans reproduire la valeur G39.
 </div>
+<div class="card note warn" id="status"></div>
 </main>
+
 <script>
 (function(){
 "use strict";
-var sections=["1.5","2.5","4","6","10","16","25","35","50","70","95","120","150","185","240","300","2x120","2x150","2x185","3x120","3x150","3x185","3x240"];
-var sectionEl=document.getElementById("section"), materialEl=document.getElementById("material"), iccEl=document.getElementById("icc"), lengthEl=document.getElementById("length"), resultEl=document.getElementById("result"), detailsEl=document.getElementById("details");
-sections.forEach(function(s){var o=document.createElement("option");o.value=s;o.textContent=s+" mm²";sectionEl.appendChild(o);});
-sectionEl.value="35";
 
-function calc(Ik,L,S,mat){
- Ik=Number(Ik);L=Number(L);S=Number(String(S).replace(",","."));L=Math.max(0,L);
- if(!(Ik>0&&S>0&&L>=0))return NaN;
- var U=400;
- var rho=mat==="Cu"?0.0225:0.0360;
- var zSource=U/(Math.sqrt(3)*Ik*1000);
- var rCable=rho*L/S;
- var zTotal=Math.sqrt(zSource*zSource+rCable*rCable);
- return U/(Math.sqrt(3)*zTotal)/1000;
+/*
+  Schneider Electric – Guide de l'installation électrique, Fig. G39.
+  Méthode de composition 230/400 V triphasé.
+  Données cuivre intégrées ici pour reproduire la lecture tabulée.
+*/
+
+// Colonnes communes du tableau central : Icc aval pour chaque Icc amont.
+var upstreamRows=[100,90,80,70,60,50,40,35,30,25,20,15,10,7,5,4,3,2,1];
+
+// 22 colonnes de composition, dans l'ordre du tableau G39.
+var central={
+100:[93,90,87,82,77,70,62,54,45,37,29,22,17.0,12.6,9.3,6.7,4.9,3.5,2.5,1.8,1.3,0.9],
+90:[84,82,79,75,71,65,58,51,43,35,28,22,16.7,12.5,9.2,6.7,4.8,3.5,2.5,1.8,1.3,0.9],
+80:[75,74,71,68,64,59,54,47,40,34,27,21,16.3,12.2,9.1,6.6,4.8,3.5,2.5,1.8,1.3,0.9],
+70:[66,65,63,61,58,54,49,44,38,32,26,20,15.8,12.0,8.9,6.6,4.8,3.4,2.5,1.8,1.3,0.9],
+60:[57,56,55,53,51,48,44,39,35,29,24,20,15.2,11.6,8.7,6.5,4.7,3.4,2.5,1.8,1.3,0.9],
+50:[48,47,46,45,43,41,38,35,31,27,22,18.3,14.5,11.2,8.5,6.3,4.6,3.4,2.4,1.7,1.2,0.9],
+40:[39,38,38,37,36,34,32,30,27,24,20,16.8,13.5,10.6,8.1,6.1,4.5,3.3,2.4,1.7,1.2,0.9],
+35:[34,34,33,33,32,30,29,27,24,22,18.8,15.8,12.9,10.2,7.9,6.0,4.5,3.3,2.4,1.7,1.2,0.9],
+30:[29,29,29,28,27,27,25,24,22,20,17.3,14.7,12.2,9.8,7.6,5.8,4.4,3.2,2.4,1.7,1.2,0.9],
+25:[25,24,24,24,23,23,22,21,19.1,17.4,15.5,13.4,11.2,9.2,7.3,5.6,4.2,3.2,2.3,1.7,1.2,0.9],
+20:[20,20,19.4,19.2,18.8,18.4,17.8,17.0,16.1,14.9,13.4,11.8,10.1,8.4,6.8,5.3,4.1,3.1,2.3,1.7,1.2,0.9],
+15:[14.8,14.8,14.7,14.5,14.3,14.1,13.7,13.3,12.7,11.9,11.0,9.9,8.7,7.4,6.1,4.9,3.8,2.9,2.2,1.6,1.2,0.9],
+10:[9.9,9.9,9.8,9.8,9.7,9.6,9.4,9.2,8.9,8.5,8.0,7.4,6.7,5.9,5.1,4.2,3.4,2.7,2.0,1.5,1.1,0.8],
+7:[7.0,6.9,6.9,6.9,6.9,6.8,6.7,6.6,6.4,6.2,6.0,5.6,5.2,4.7,4.2,3.6,3.0,2.4,1.9,1.4,1.1,0.8],
+5:[5.0,5.0,5.0,4.9,4.9,4.9,4.9,4.8,4.7,4.6,4.5,4.3,4.0,3.7,3.4,3.0,2.5,2.1,1.7,1.3,1.0,0.8],
+4:[4.0,4.0,4.0,4.0,4.0,3.9,3.9,3.9,3.8,3.7,3.6,3.5,3.3,3.1,2.9,2.6,2.2,1.9,1.6,1.2,1.0,0.7],
+3:[3.0,3.0,3.0,3.0,3.0,3.0,2.9,2.9,2.9,2.9,2.8,2.7,2.6,2.5,2.3,2.1,1.9,1.6,1.4,1.1,0.9,0.7],
+2:[2.0,2.0,2.0,2.0,2.0,2.0,2.0,2.0,2.0,1.9,1.9,1.9,1.8,1.8,1.7,1.6,1.4,1.3,1.1,1.0,0.8,0.6],
+1:[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.9,0.9,0.9,0.8,0.8,0.7,0.6,0.6,0.5]
+};
+
+// Longueurs correspondant aux 22 colonnes du tableau central (cuivre).
+// Les cellules vides de la source sont représentées par null.
+var copperLengths={
+"1.5":[null,null,null,null,null,null,null,null,null,null,null,null,null,1.3,1.8,2.6,3.6,5.2,7.3,10.3,14.6,21],
+"2.5":[null,null,null,null,null,null,null,null,null,null,null,1.1,1.5,2.1,3.0,4.3,6.1,8.6,12.1,17.2,24,34],
+"4":[null,null,null,null,null,null,null,null,null,null,1.2,1.7,2.4,3.4,4.9,6.9,9.7,13.7,19.4,27,39,55],
+"6":[null,null,null,null,null,null,null,null,null,null,1.8,2.6,3.6,5.2,7.3,10.3,14.6,21,29,41,58,82],
+"10":[null,null,null,null,null,null,null,null,null,2.2,3.0,4.3,6.1,8.6,12.2,17.2,24,34,49,69,97,137],
+"16":[null,null,null,null,null,null,null,null,1.7,2.4,3.4,4.9,6.9,9.7,13.8,19.4,27,39,55,78,110,155],
+"25":[null,null,null,null,null,1.3,1.9,2.7,3.8,5.4,7.6,10.8,15.2,21,30,43,61,86,121,172,243,343],
+"35":[null,null,null,null,null,1.9,2.7,3.8,5.3,7.5,10.6,15.1,21,30,43,60,85,120,170,240,340,480],
+"50":[null,null,null,null,1.8,2.6,3.6,5.1,7.2,10.2,14.4,20,29,41,58,82,115,163,231,326,461,null],
+"70":[null,null,null,null,2.7,3.8,5.3,7.5,10.7,15.1,21,30,43,60,85,120,170,240,340,null,null,null],
+"95":[null,null,null,2.6,3.6,5.1,7.2,10.2,14.5,20,29,41,58,82,115,163,231,326,461,null,null,null],
+"120":[null,1.6,2.3,3.2,4.6,6.5,9.1,12.9,18.3,26,37,52,73,103,146,206,291,412,null,null,null,null],
+"150":[1.2,1.8,2.5,3.5,5.0,7.0,9.9,14.0,19.8,28,40,56,79,112,159,224,317,448,null,null,null,null],
+"185":[1.5,2.1,2.9,4.2,5.9,8.3,11.7,16.6,23,33,47,66,94,133,187,265,374,529,null,null,null,null],
+"240":[1.8,2.6,3.7,5.2,7.3,10.3,14.6,21,29,41,58,83,117,165,233,330,466,659,null,null,null,null],
+"300":[2.2,3.1,4.4,6.2,8.8,12.4,17.6,25,35,50,70,99,140,198,280,396,561,null,null,null,null,null],
+"2x120":[2.3,3.2,4.6,6.5,9.1,12.9,18.3,26,37,52,73,103,146,206,292,412,583,null,null,null,null,null],
+"2x150":[2.5,3.5,5.0,7.0,9.9,14.0,20,28,40,56,79,112,159,224,317,448,634,null,null,null,null,null],
+"2x185":[2.9,4.2,5.9,8.3,11.7,16.6,23,33,47,66,94,133,187,265,375,530,749,null,null,null,null,null],
+"3x120":[3.4,4.9,6.9,9.7,13.7,19.4,27,39,55,77,110,155,219,309,438,619,null,null,null,null,null,null],
+"3x150":[3.7,5.3,7.5,10.5,14.9,21,30,42,60,84,119,168,238,336,476,672,null,null,null,null,null,null],
+"3x185":[4.4,6.2,8.8,12.5,17.6,25,35,50,70,100,141,199,281,398,562,null,null,null,null,null,null,null]
+};
+
+var sections=Object.keys(copperLengths);
+var sectionEl=document.getElementById("section"),
+    materialEl=document.getElementById("material"),
+    iccEl=document.getElementById("icc"),
+    lengthEl=document.getElementById("length"),
+    resultEl=document.getElementById("result"),
+    detailsEl=document.getElementById("details"),
+    mi=document.getElementById("matrixIcc"),
+    statusEl=document.getElementById("status");
+
+sections.forEach(function(s){
+  var o=document.createElement("option");
+  o.value=s;o.textContent=s+" mm²";
+  sectionEl.appendChild(o);
+});
+sectionEl.value="25";
+
+upstreamRows.forEach(function(v){
+  var o=document.createElement("option");
+  o.value=v;o.textContent=v+" kA";
+  mi.appendChild(o);
+});
+mi.value="25";
+
+function fmt(v){
+  return Number(v).toLocaleString("fr-BE",{minimumFractionDigits:1,maximumFractionDigits:1});
 }
-function fmt(v){return Number(v).toLocaleString("fr-BE",{minimumFractionDigits:1,maximumFractionDigits:2});}
+
+function upstreamByExcess(v){
+  v=Number(v);
+  // Tableau ordonné du plus grand au plus petit : prendre la plus petite valeur >= v.
+  for(var i=upstreamRows.length-1;i>=0;i--){
+    if(upstreamRows[i]>=v) return upstreamRows[i];
+  }
+  return null; // au-delà de 100 kA
+}
+
+function lengthByDefault(lengths,L){
+  // "par défaut" : plus grande longueur tabulée <= longueur demandée.
+  // Si L tombe exactement sur une valeur, elle est retenue.
+  var best=null,bestIndex=-1;
+  for(var i=0;i<lengths.length;i++){
+    var x=lengths[i];
+    if(x!==null && x<=L && (best===null || x>best)){
+      best=x;bestIndex=i;
+    }
+  }
+  return bestIndex<0?null:{value:best,index:bestIndex};
+}
+
+function calculate(){
+  if(materialEl.value!=="Cu"){
+    return {error:"Mode aluminium : table complète non encore intégrée dans cette version stricte."};
+  }
+  var I=Number(iccEl.value), L=Number(lengthEl.value);
+  if(!(I>0 && L>=0)) return {error:"Vérifie les valeurs saisies."};
+  var row=upstreamByExcess(I);
+  if(row===null) return {error:"Icc amont hors plage de la table G39 (1 à 100 kA)."};
+  var lengths=copperLengths[sectionEl.value];
+  var col=lengthByDefault(lengths,L);
+  if(!col) return {error:"Longueur trop faible pour une lecture tabulée avec cette section."};
+  return {
+    value:central[row][col.index],
+    upstream:row,
+    length:col.value,
+    index:col.index
+  };
+}
+
 function update(){
- var v=calc(iccEl.value,lengthEl.value,sectionEl.value,materialEl.value);
- if(Number.isFinite(v)){resultEl.textContent=fmt(v)+" kA";detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • "+lengthEl.value+" m • Icc amont "+iccEl.value+" kA";}
- else {resultEl.textContent="—";detailsEl.textContent="Vérifie les valeurs";}
- buildMatrix();
+  var r=calculate();
+  if(r.error){
+    resultEl.textContent="—";
+    detailsEl.textContent=r.error;
+    statusEl.textContent=r.error;
+  }else{
+    resultEl.textContent=fmt(r.value)+" kA";
+    detailsEl.textContent=
+      "Cuivre • "+sectionEl.value+" mm² • longueur retenue "+fmt(r.length)+" m • Icc amont retenu "+fmt(r.upstream)+" kA";
+    statusEl.textContent=
+      "Lecture G39 : longueur par défaut = "+fmt(r.length)+" m ; Icc amont par excès = "+fmt(r.upstream)+" kA.";
+  }
+  buildMatrix();
 }
-[sectionEl,materialEl,iccEl,lengthEl].forEach(function(e){e.addEventListener("input",update);e.addEventListener("change",update);});
 
-var mi=document.getElementById("matrixIcc");
-for(var i=1;i<=100;i++){var op=document.createElement("option");op.value=i;op.textContent=i+" kA";if(i===28)op.selected=true;mi.appendChild(op);}
+[sectionEl,materialEl,iccEl,lengthEl].forEach(function(e){
+  e.addEventListener("input",update);
+  e.addEventListener("change",update);
+});
 mi.addEventListener("change",buildMatrix);
 
 function buildMatrix(){
- var lengths=[0,10,20,30,40,50,75,100,150,200,300,400,500], ik=Number(mi.value), s=sectionEl.value, m=materialEl.value;
- var h="<table><thead><tr><th>Longueur</th>";
- lengths.forEach(function(l){h+="<th>"+l+" m</th>";});
- h+="</tr></thead><tbody><tr><th>Icc aval</th>";
- lengths.forEach(function(l){var v=calc(ik,l,s,m);h+="<td>"+fmt(v)+"</td>";});
- h+="</tr></tbody></table>";
- document.getElementById("matrix").innerHTML=h;
+  if(materialEl.value!=="Cu"){
+    document.getElementById("matrix").innerHTML="<p class='note'>La matrice stricte aluminium sera ajoutée avec la table complète validée.</p>";
+    return;
+  }
+  var row=Number(mi.value);
+  var lengths=copperLengths[sectionEl.value];
+  var h="<table><thead><tr><th>Longueur G39</th>";
+  lengths.forEach(function(l){
+    h+="<th>"+(l===null?"—":fmt(l)+" m")+"</th>";
+  });
+  h+="</tr></thead><tbody><tr><th>Icc aval<br><small>Icc amont "+fmt(row)+" kA</small></th>";
+  lengths.forEach(function(l,i){
+    h+="<td>"+(l===null?"—":fmt(central[row][i])+" kA")+"</td>";
+  });
+  h+="</tr></tbody></table>";
+  document.getElementById("matrix").innerHTML=h;
 }
+
 update();
 })();
 </script>
-</body></html>
+</body>
+</html>
