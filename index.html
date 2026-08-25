@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Icc Calculator</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#172033;background:#eef2f7}
+*{box-sizing:border-box} body{margin:0;background:#eef2f7}
+header{background:#182235;color:white;padding:22px 20px}
+h1{margin:0;font-size:25px}.sub{opacity:.78;margin-top:6px}
+main{max-width:980px;margin:0 auto;padding:18px}
+.card{background:white;border-radius:22px;padding:18px;margin:14px 0;box-shadow:0 8px 25px rgba(20,35,55,.08)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+label{display:block;font-weight:650;font-size:14px;color:#56657a;margin-bottom:7px}
+select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;border-radius:14px;background:#fff}
+.result{background:#1d293c;color:#fff;text-align:center;padding:25px;border-radius:20px}
+.result small{display:block;opacity:.72;letter-spacing:.08em}.value{font-size:52px;font-weight:800;margin:10px 0}
+.info{font-size:14px;color:#637085;text-align:center}
+.matrix{overflow:auto}.matrix table{border-collapse:collapse;width:100%;min-width:700px}.matrix th,.matrix td{padding:8px;border:1px solid #d7dee8;text-align:center}.matrix th{background:#edf3f8}
+.note{font-size:13px;color:#667085;line-height:1.45}
+@media(max-width:700px){.grid{grid-template-columns:1fr 1fr}.value{font-size:42px}}
+</style>
+</head>
+<body>
+<header><h1>⚡ Icc Calculator</h1><div class="sub">230/400 V triphasé</div></header>
+<main>
+<div class="card">
+<div class="grid">
+<div><label for="material">Conducteur</label><select id="material"><option value="Cu">Cuivre</option><option value="Al">Aluminium</option></select></div>
+<div><label for="section">Section</label><select id="section"></select></div>
+<div><label for="icc">Icc amont (kA)</label><input id="icc" type="number" min="1" max="100" step="0.1" value="28"></div>
+<div><label for="length">Longueur (m)</label><input id="length" type="number" min="0" max="500" step="1" value="29"></div>
+</div>
+</div>
+<div class="card result">
+<small>ICC EN BOUT DE LIGNE</small>
+<div class="value" id="result">—</div>
+<div id="details"></div>
+</div>
+<div class="card">
+<label for="matrixIcc">Matrice rapide – Icc amont</label>
+<select id="matrixIcc"></select>
+<div class="matrix" id="matrix"></div>
+</div>
+<div class="card note">
+<b>Version prototype fonctionnelle.</b> Le calcul utilise la composition d'impédances (source + conducteur). La prochaine étape est d'intégrer exactement les tables G39 fournies afin d'obtenir la reproduction stricte des valeurs tabulées Schneider.
+</div>
+</main>
+<script>
+(function(){
+"use strict";
+var sections=["1.5","2.5","4","6","10","16","25","35","50","70","95","120","150","185","240","300","2x120","2x150","2x185","3x120","3x150","3x185","3x240"];
+var sectionEl=document.getElementById("section"), materialEl=document.getElementById("material"), iccEl=document.getElementById("icc"), lengthEl=document.getElementById("length"), resultEl=document.getElementById("result"), detailsEl=document.getElementById("details");
+sections.forEach(function(s){var o=document.createElement("option");o.value=s;o.textContent=s+" mm²";sectionEl.appendChild(o);});
+sectionEl.value="35";
+
+function calc(Ik,L,S,mat){
+ Ik=Number(Ik);L=Number(L);S=Number(String(S).replace(",","."));L=Math.max(0,L);
+ if(!(Ik>0&&S>0&&L>=0))return NaN;
+ var U=400;
+ var rho=mat==="Cu"?0.0225:0.0360;
+ var zSource=U/(Math.sqrt(3)*Ik*1000);
+ var rCable=rho*L/S;
+ var zTotal=Math.sqrt(zSource*zSource+rCable*rCable);
+ return U/(Math.sqrt(3)*zTotal)/1000;
+}
+function fmt(v){return Number(v).toLocaleString("fr-BE",{minimumFractionDigits:1,maximumFractionDigits:2});}
+function update(){
+ var v=calc(iccEl.value,lengthEl.value,sectionEl.value,materialEl.value);
+ if(Number.isFinite(v)){resultEl.textContent=fmt(v)+" kA";detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • "+lengthEl.value+" m • Icc amont "+iccEl.value+" kA";}
+ else {resultEl.textContent="—";detailsEl.textContent="Vérifie les valeurs";}
+ buildMatrix();
+}
+[sectionEl,materialEl,iccEl,lengthEl].forEach(function(e){e.addEventListener("input",update);e.addEventListener("change",update);});
+
+var mi=document.getElementById("matrixIcc");
+for(var i=1;i<=100;i++){var op=document.createElement("option");op.value=i;op.textContent=i+" kA";if(i===28)op.selected=true;mi.appendChild(op);}
+mi.addEventListener("change",buildMatrix);
+
+function buildMatrix(){
+ var lengths=[0,10,20,30,40,50,75,100,150,200,300,400,500], ik=Number(mi.value), s=sectionEl.value, m=materialEl.value;
+ var h="<table><thead><tr><th>Longueur</th>";
+ lengths.forEach(function(l){h+="<th>"+l+" m</th>";});
+ h+="</tr></thead><tbody><tr><th>Icc aval</th>";
+ lengths.forEach(function(l){var v=calc(ik,l,s,m);h+="<td>"+fmt(v)+"</td>";});
+ h+="</tr></tbody></table>";
+ document.getElementById("matrix").innerHTML=h;
+}
+update();
+})();
+</script>
+</body></html>
