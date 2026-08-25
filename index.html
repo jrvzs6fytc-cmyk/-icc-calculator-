@@ -82,6 +82,11 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
 </div>
 
 <div class="card">
+<label>Détail de mes calculs</label>
+<div id="calculationBreakdown" class="note">Les étapes de calcul apparaîtront ici.</div>
+</div>
+
+<div class="card">
 <label for="matrixIcc">Matrice rapide – Icc amont retenu</label>
 <select id="matrixIcc"></select>
 <div class="matrix" id="matrix"></div>
@@ -207,7 +212,7 @@ var sectionEl=document.getElementById("section"),
     transformerCard=document.getElementById("transformerCard"),
     secondaryCurrentEl=document.getElementById("secondaryCurrent"),
     uccPercentEl=document.getElementById("uccPercent"),
-    transformerIccEl=document.getElementById("transformerIcc");
+    transformerIccEl=document.getElementById("transformerIcc"),\n    calculationBreakdownEl=document.getElementById("calculationBreakdown");
 
 sections.forEach(function(s){
   var o=document.createElement("option");
@@ -258,11 +263,11 @@ function refreshVoltage(){
   var current=calculateSecondaryCurrent();
   secondaryCurrentEl.value=current!==null?current.toFixed(2):"";
   if(voltage===230){
-    voltageNoteEl.textContent="3×230 V : la tension 230 V est utilisée directement pour le calcul du transformateur.";
+    voltageNoteEl.textContent="3×230 V : calcul transformateur à 230 V + conversion des longueurs G39 selon la règle Schneider (√3).";
   }else if(voltage===400){
-    voltageNoteEl.textContent="3N~400 V : la tension 400 V est utilisée directement pour le calcul du transformateur.";
+    voltageNoteEl.textContent="3N~400 V : calcul transformateur à 400 V + longueur G39 utilisée directement.";
   }else{
-    voltageNoteEl.textContent="3N~420 V : la tension 420 V est utilisée directement pour le calcul du transformateur.";
+    voltageNoteEl.textContent="3N~420 V : calcul transformateur à 420 V + adaptation de longueur ×1,05.";
   }
 }
 
@@ -347,8 +352,22 @@ function interpolateUpstream(valuesByRow, I, lengths, L){
   return yLow+(I-low)*(yHigh-yLow)/(high-low);
 }
 
+function tableEquivalentLength(realLength){
+  var v=selectedVoltage();
+  if(v===230) return realLength*Math.sqrt(3);
+  if(v===420) return realLength/1.05;
+  return realLength;
+}
+
+function voltageTableNote(){
+  var v=selectedVoltage();
+  if(v===230) return "3×230 V : conversion Schneider des longueurs par √3.";
+  if(v===420) return "3N~420 V : adaptation de longueur ×1,05.";
+  return "3N~400 V : longueur utilisée directement.";
+}
+
 function calculate(){
-  var I=Number(iccEl.value), L=Number(lengthEl.value);
+  var I=Number(iccEl.value), L=Number(lengthEl.value); var tableL=tableEquivalentLength(L);
   var mode=document.getElementById("mode").value;
   if(!(I>0 && L>=0)) return {error:"Vérifie les valeurs saisies."};
   var table=(materialEl.value==="Cu")?copperLengths:aluminiumLengths;
@@ -358,14 +377,39 @@ function calculate(){
   if(mode==="strict"){
     var row=upstreamByExcess(I);
     if(row===null) return {error:"Icc amont hors plage de la table G39 (1 à 100 kA)."};
-    var col=lengthByDefault(lengths,L);
+    var col=lengthByDefault(lengths,tableL);
     if(!col) return {error:"Longueur trop faible pour une lecture tabulée avec cette section."};
-    return {value:central[row][col.index], upstream:row, length:col.value, strict:true};
+    return {value:central[row][col.index], upstream:row, length:L, tableLength:col.value, strict:true};
   }
 
-  var value=interpolateUpstream(central,I,lengths,L);
+  var value=interpolateUpstream(central,I,lengths,tableL);
   if(value===null) return {error:"Impossible d'interpoler cette combinaison."};
-  return {value:value, upstream:I, length:L, strict:false};
+  return {value:value, upstream:I, length:L, tableLength:tableL, strict:false};
+}
+
+function updateCalculationBreakdown(r){
+  var v=selectedVoltage();
+  var voltageLabel=v===230?"3×230 V":(v===420?"3N~420 V":"3N~400 V");
+  var source="";
+  if(sourceModeEl.value==="transformer"){
+    var power=Number(transformerPowerEl.value);
+    var sec=calculateSecondaryCurrent();
+    var ucc=Number(uccPercentEl.value);
+    var ticc=calculateTransformerIcc();
+    source="<b>1. Transformateur</b><br>"+
+      "Puissance : "+fmt(power)+" kVA<br>"+
+      "Tension : "+voltageLabel+" ("+v+" V)<br>"+
+      "Courant secondaire = "+fmt(power*1000)+" / (√3 × "+v+") = <b>"+fmt(sec)+" A</b><br>"+
+      "Icc transfo = "+fmt(sec)+" × 100 / "+fmt(ucc)+" = <b>"+fmt(ticc)+" kA</b>";
+  }else{
+    source="<b>1. Source amont</b><br>Icc amont saisi : <b>"+fmt(Number(iccEl.value))+" kA</b>";
+  }
+  var conv;
+  if(v===230) conv="Longueur G39 équivalente = "+fmt(Number(lengthEl.value))+" × √3 = <b>"+fmt(Number(lengthEl.value)*Math.sqrt(3))+" m</b>";
+  else if(v===420) conv="Longueur G39 équivalente = "+fmt(Number(lengthEl.value))+" / 1,05 = <b>"+fmt(Number(lengthEl.value)/1.05)+" m</b>";
+  else conv="Longueur G39 équivalente = <b>"+fmt(Number(lengthEl.value))+" m</b> (pas de conversion)";
+  var resultText=r && !r.error ? "<br><br><b>3. Résultat</b><br>Icc en bout de ligne : <b>"+fmt(r.value)+" kA</b>" : "";
+  calculationBreakdownEl.innerHTML=source+"<br><br><b>2. Câble / table G39</b><br>"+conv+resultText;
 }
 
 function update(){
@@ -377,7 +421,7 @@ function update(){
   }else{
     resultEl.textContent=fmt(r.value)+" kA";
     if(r.strict){
-      detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • longueur retenue "+fmt(r.length)+" m • Icc amont retenu "+fmt(r.upstream)+" kA";
+      detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • longueur réelle "+fmt(r.length)+" m"+(selectedVoltage()!==400?" • équivalent G39 "+fmt(r.tableLength)+" m":"")+" • Icc amont retenu "+fmt(r.upstream)+" kA";
       badge.textContent="Mode Schneider strict";
       statusEl.textContent="Lecture G39 stricte : longueur retenue par défaut et Icc amont retenu par excès.";
     }else{
@@ -386,9 +430,10 @@ function update(){
         : "Icc amont "+fmt(r.upstream)+" kA";
       detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • "+fmt(r.length)+" m • "+sourceText;
       badge.textContent="Interpolation G39";
-      statusEl.textContent="Valeur interpolée entre les points disponibles des tables G39 : pas de palier artificiel entre deux longueurs ou deux Icc. Référence intégrée : G39 230/400 V. Le choix de tension agit sur le calcul du transformateur." ;
+      statusEl.textContent="Valeur interpolée entre les points disponibles des tables G39 : pas de palier artificiel entre deux longueurs ou deux Icc. "+voltageTableNote();
     }
   }
+  updateCalculationBreakdown(r);
   buildMatrix();
 }
 function buildMatrix(){
