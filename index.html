@@ -25,7 +25,7 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
 </style>
 </head>
 <body>
-<header><h1>⚡ Icc Calculator</h1><div class="sub">230/400 V triphasé • méthode Schneider G39</div></header>
+<header><h1>⚡ Icc Calculator</h1><div class="sub">230/400 V triphasé • Tables Schneider G39</div></header>
 <main>
 <div class="card">
 <div class="grid">
@@ -36,11 +36,19 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
 </div>
 </div>
 
+<div class="card">
+<label for="mode">Méthode de calcul</label>
+<select id="mode">
+<option value="interpolated">Interpolation précise (recommandée)</option>
+<option value="strict">Schneider strict (lecture tabulaire)</option>
+</select>
+<div class="note">L'interpolation calcule une valeur continue entre les valeurs des tables G39. Le mode strict reproduit la lecture par défaut / par excès.</div>
+</div>
 <div class="card result">
 <small>ICC EN BOUT DE LIGNE</small>
 <div class="value" id="result">—</div>
 <div id="details"></div>
-<div class="badge">Mode Schneider strict</div>
+<div class="badge" id="modeBadge">Interpolation G39</div>
 </div>
 
 <div class="card">
@@ -55,6 +63,11 @@ La longueur est sélectionnée par défaut dans la ligne de la section, puis l'I
 La valeur affichée est la valeur tabulée correspondante. L'ancienne version utilisait une formule d'impédance simplifiée : elle pouvait être cohérente physiquement sans reproduire la valeur G39.
 </div>
 <div class="card note warn" id="status"></div>
+<div class="card note" style="text-align:center;margin-top:22px">
+<b>Icc Calculator — Réalisé par Mathieu Mercier © 2026</b><br>
+Outil développé à titre privé et indicatif. Les résultats doivent être vérifiés avant toute utilisation technique.
+L’utilisateur reste responsable de l’interprétation et de l’utilisation des résultats.
+</div>
 </main>
 
 <script>
@@ -198,75 +211,108 @@ function upstreamByExcess(v){
 }
 
 function lengthByDefault(lengths,L){
-  // "par défaut" : plus grande longueur tabulée <= longueur demandée.
-  // Si L tombe exactement sur une valeur, elle est retenue.
   var best=null,bestIndex=-1;
   for(var i=0;i<lengths.length;i++){
     var x=lengths[i];
-    if(x!==null && x<=L && (best===null || x>best)){
-      best=x;bestIndex=i;
-    }
+    if(x!==null && x<=L && (best===null || x>best)){best=x;bestIndex=i;}
   }
   return bestIndex<0?null:{value:best,index:bestIndex};
 }
 
+function interpolateAtLength(lengths, values, L){
+  var pts=[];
+  for(var i=0;i<lengths.length;i++){
+    if(lengths[i]!==null && values[i]!==undefined && values[i]!==null){
+      pts.push({x:Number(lengths[i]),y:Number(values[i])});
+    }
+  }
+  if(!pts.length) return null;
+  pts.sort(function(a,b){return a.x-b.x;});
+  if(L<=pts[0].x) return pts[0].y;
+  if(L>=pts[pts.length-1].x) return pts[pts.length-1].y;
+  for(var j=0;j<pts.length-1;j++){
+    var a=pts[j],b=pts[j+1];
+    if(L>=a.x && L<=b.x){
+      var t=(L-a.x)/(b.x-a.x);
+      return a.y+t*(b.y-a.y);
+    }
+  }
+  return null;
+}
+
+function interpolateUpstream(valuesByRow, I, lengths, L){
+  var rows=upstreamRows.slice().sort(function(a,b){return a-b;});
+  if(I<rows[0]) I=rows[0];
+  if(I>rows[rows.length-1]) I=rows[rows.length-1];
+
+  var low=rows[0], high=rows[rows.length-1];
+  for(var i=0;i<rows.length-1;i++){
+    if(I>=rows[i] && I<=rows[i+1]){low=rows[i];high=rows[i+1];break;}
+  }
+  var yLow=interpolateAtLength(lengths,valuesByRow[low],L);
+  var yHigh=interpolateAtLength(lengths,valuesByRow[high],L);
+  if(yLow===null || yHigh===null) return null;
+  if(high===low) return yLow;
+  return yLow+(I-low)*(yHigh-yLow)/(high-low);
+}
+
 function calculate(){
   var I=Number(iccEl.value), L=Number(lengthEl.value);
+  var mode=document.getElementById("mode").value;
   if(!(I>0 && L>=0)) return {error:"Vérifie les valeurs saisies."};
-  var row=upstreamByExcess(I);
-  if(row===null) return {error:"Icc amont hors plage de la table G39 (1 à 100 kA)."};
   var table=(materialEl.value==="Cu")?copperLengths:aluminiumLengths;
   var lengths=table[sectionEl.value];
   if(!lengths) return {error:"Cette section n'est pas disponible pour le matériau sélectionné."};
-  var col=lengthByDefault(lengths,L);
-  if(!col) return {error:"Longueur trop faible pour une lecture tabulée avec cette section."};
-  return {
-    value:central[row][col.index],
-    upstream:row,
-    length:col.value,
-    index:col.index
-  };
+
+  if(mode==="strict"){
+    var row=upstreamByExcess(I);
+    if(row===null) return {error:"Icc amont hors plage de la table G39 (1 à 100 kA)."};
+    var col=lengthByDefault(lengths,L);
+    if(!col) return {error:"Longueur trop faible pour une lecture tabulée avec cette section."};
+    return {value:central[row][col.index], upstream:row, length:col.value, strict:true};
+  }
+
+  var value=interpolateUpstream(central,I,lengths,L);
+  if(value===null) return {error:"Impossible d'interpoler cette combinaison."};
+  return {value:value, upstream:I, length:L, strict:false};
 }
 
 function update(){
+  var modeEl=document.getElementById("mode");
+  var badge=document.getElementById("modeBadge");
   var r=calculate();
   if(r.error){
-    resultEl.textContent="—";
-    detailsEl.textContent=r.error;
-    statusEl.textContent=r.error;
+    resultEl.textContent="—";detailsEl.textContent=r.error;statusEl.textContent=r.error;
   }else{
     resultEl.textContent=fmt(r.value)+" kA";
-    detailsEl.textContent=
-      (materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • longueur retenue "+fmt(r.length)+" m • Icc amont retenu "+fmt(r.upstream)+" kA";
-    statusEl.textContent=
-      "Lecture G39 : longueur par défaut = "+fmt(r.length)+" m ; Icc amont par excès = "+fmt(r.upstream)+" kA.";
+    if(r.strict){
+      detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • longueur retenue "+fmt(r.length)+" m • Icc amont retenu "+fmt(r.upstream)+" kA";
+      badge.textContent="Mode Schneider strict";
+      statusEl.textContent="Lecture G39 stricte : longueur retenue par défaut et Icc amont retenu par excès.";
+    }else{
+      detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • "+fmt(r.length)+" m • Icc amont "+fmt(r.upstream)+" kA";
+      badge.textContent="Interpolation G39";
+      statusEl.textContent="Valeur interpolée entre les points disponibles des tables G39 : pas de palier artificiel entre deux longueurs ou deux Icc.";
+    }
   }
   buildMatrix();
 }
-
-[sectionEl,materialEl,iccEl,lengthEl].forEach(function(e){
-  e.addEventListener("input",update);
-  e.addEventListener("change",update);
-});
-mi.addEventListener("change",buildMatrix);
-
 function buildMatrix(){
-  var row=Number(mi.value);
   var table=(materialEl.value==="Cu")?copperLengths:aluminiumLengths;
   var lengths=table[sectionEl.value];
   if(!lengths){document.getElementById("matrix").innerHTML="<p class='note'>Section indisponible pour ce matériau.</p>";return;}
-  var h="<table><thead><tr><th>Longueur G39</th>";
-  lengths.forEach(function(l){
-    h+="<th>"+(l===null?"—":fmt(l)+" m")+"</th>";
-  });
+  var row=Number(mi.value);
+  var allRows=central;
+  var max=500, h="<table><thead><tr><th>Longueur</th>";
+  for(var l=0;l<=max;l+=1) h+="<th>"+l+" m</th>";
   h+="</tr></thead><tbody><tr><th>Icc aval<br><small>Icc amont "+fmt(row)+" kA</small></th>";
-  lengths.forEach(function(l,i){
-    h+="<td>"+(l===null?"—":fmt(central[row][i])+" kA")+"</td>";
-  });
+  for(var m=0;m<=max;m+=1){
+    var v=interpolateAtLength(lengths,allRows[row],m);
+    h+="<td>"+(v===null?"—":fmt(v))+"</td>";
+  }
   h+="</tr></tbody></table>";
   document.getElementById("matrix").innerHTML=h;
 }
-
 update();
 })();
 </script>
