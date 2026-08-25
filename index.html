@@ -25,8 +25,18 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
 </style>
 </head>
 <body>
-<header><h1>⚡ Icc Calculator</h1><div class="sub">230/400 V triphasé • Tables Schneider G39</div></header>
+<header><h1>⚡ Icc Calculator</h1><div class="sub">3×230 V • 3N~400 V • 3N~420 V • Calcul Icc</div></header>
 <main>
+<div class="card">
+<label for="networkVoltage">Réseau / tension composée</label>
+<select id="networkVoltage">
+  <option value="230">3×230 V</option>
+  <option value="400" selected>3N~400 V</option>
+  <option value="420">3N~420 V</option>
+</select>
+<div class="note" id="voltageNote">La tension choisie est utilisée pour le calcul automatique du courant secondaire du transformateur.</div>
+</div>
+
 <div class="card">
 <label for="sourceMode">Source de l’Icc amont</label>
 <select id="sourceMode">
@@ -38,12 +48,13 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
 
 <div class="card" id="transformerCard" style="display:none">
 <div class="grid">
-<div><label for="secondaryCurrent">Courant secondaire (A)</label><input id="secondaryCurrent" type="number" min="1" step="0.01" value="1374.64"></div>
+<div><label for="transformerPower">Puissance transformateur (kVA)</label><input id="transformerPower" type="number" min="1" step="1" value="630"></div>
+<div><label for="secondaryCurrent">Courant secondaire (A)</label><input id="secondaryCurrent" type="number" min="1" step="0.01" value="909.33" readonly></div>
 <div><label for="uccPercent">Tension de court-circuit Ucc (%)</label><input id="uccPercent" type="number" min="0.01" step="0.01" value="6"></div>
-<div><label for="transformerVoltage">Tension secondaire (V) — info</label><input id="transformerVoltage" type="number" min="1" step="1" value="420"></div>
-<div><label>Icc calculé au secondaire</label><div id="transformerIcc" style="font-size:24px;font-weight:800;padding:14px;border:1px solid #ccd5e0;border-radius:14px;background:#f5f8fb">22,9 kA</div></div>
+<div><label>Tension secondaire utilisée</label><div id="transformerVoltageDisplay" style="font-size:24px;font-weight:800;padding:14px;border:1px solid #ccd5e0;border-radius:14px;background:#f5f8fb">400 V</div></div>
+<div><label>Icc calculé au secondaire</label><div id="transformerIcc" style="font-size:24px;font-weight:800;padding:14px;border:1px solid #ccd5e0;border-radius:14px;background:#f5f8fb">15,2 kA</div></div>
 </div>
-<div class="note">Valeur théorique simplifiée au secondaire du transformateur, avant ajout des impédances/câbles en aval.</div>
+<div class="note">Calcul : I secondaire = S / (√3 × U). Puis Icc = I secondaire × 100 / Ucc (%). La tension est la tension composée sélectionnée.</div>
 </div>
 
 <div class="card">
@@ -189,6 +200,10 @@ var sectionEl=document.getElementById("section"),
     mi=document.getElementById("matrixIcc"),
     statusEl=document.getElementById("status"),
     sourceModeEl=document.getElementById("sourceMode"),
+    networkVoltageEl=document.getElementById("networkVoltage"),
+    voltageNoteEl=document.getElementById("voltageNote"),
+    transformerPowerEl=document.getElementById("transformerPower"),
+    transformerVoltageDisplayEl=document.getElementById("transformerVoltageDisplay"),
     transformerCard=document.getElementById("transformerCard"),
     secondaryCurrentEl=document.getElementById("secondaryCurrent"),
     uccPercentEl=document.getElementById("uccPercent"),
@@ -221,15 +236,38 @@ upstreamRows.forEach(function(v){
 });
 mi.value="25";
 
+function selectedVoltage(){ return Number(networkVoltageEl.value); }
+
+function calculateSecondaryCurrent(){
+  var powerKVA=Number(transformerPowerEl.value);
+  var voltage=selectedVoltage();
+  if(!(powerKVA>0) || !(voltage>0)) return null;
+  return (powerKVA*1000)/(Math.sqrt(3)*voltage);
+}
+
 function calculateTransformerIcc(){
-  var secondary=Number(secondaryCurrentEl.value);
+  var secondary=calculateSecondaryCurrent();
   var ucc=Number(uccPercentEl.value);
   if(!(secondary>0) || !(ucc>0)) return null;
-  // Formule simple demandée : Icc(A) = (I secondaire / Ucc %) × 100
-  return (secondary/ucc)*100/1000; // conversion A -> kA
+  return (secondary*100/ucc)/1000;
+}
+
+function refreshVoltage(){
+  var voltage=selectedVoltage();
+  transformerVoltageDisplayEl.textContent=voltage+" V";
+  var current=calculateSecondaryCurrent();
+  secondaryCurrentEl.value=current!==null?current.toFixed(2):"";
+  if(voltage===400){
+    voltageNoteEl.textContent="3N~400 V : tension utilisée directement pour le calcul du transformateur et référence nominale de la table G39 intégrée.";
+  }else if(voltage===230){
+    voltageNoteEl.textContent="3×230 V : la tension 230 V est utilisée directement pour le calcul du transformateur. La table G39 reste une table de référence distincte : aucune conversion supplémentaire n’est appliquée ici sans validation.";
+  }else{
+    voltageNoteEl.textContent="3N~420 V : la tension 420 V est utilisée directement pour le calcul du transformateur. La table G39 intégrée n’est pas automatiquement recalibrée à 420 V.";
+  }
 }
 
 function refreshSource(){
+  refreshVoltage();
   var isTransformer=sourceModeEl.value==="transformer";
   transformerCard.style.display=isTransformer?"block":"none";
   iccEl.readOnly=isTransformer;
@@ -246,7 +284,8 @@ function refreshSource(){
 }
 
 sourceModeEl.addEventListener("change",function(){refreshSource();update();});
-secondaryCurrentEl.addEventListener("input",function(){refreshSource();update();});
+transformerPowerEl.addEventListener("input",function(){refreshSource();update();});
+networkVoltageEl.addEventListener("change",function(){refreshSource();update();});
 uccPercentEl.addEventListener("input",function(){refreshSource();update();});
 
 function fmt(v){
@@ -347,7 +386,7 @@ function update(){
         : "Icc amont "+fmt(r.upstream)+" kA";
       detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • "+fmt(r.length)+" m • "+sourceText;
       badge.textContent="Interpolation G39";
-      statusEl.textContent="Valeur interpolée entre les points disponibles des tables G39 : pas de palier artificiel entre deux longueurs ou deux Icc.";
+      statusEl.textContent="Valeur interpolée entre les points disponibles des tables G39 : pas de palier artificiel entre deux longueurs ou deux Icc. Référence intégrée : G39 230/400 V ; les tensions 230 V et 420 V ne sont pas automatiquement converties pour la table." ;
     }
   }
   buildMatrix();
