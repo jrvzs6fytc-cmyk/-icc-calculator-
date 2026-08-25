@@ -1,634 +1,221 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Icc Calculator</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Icc Calculator — 230/400 V & 3×230 V</title>
 <style>
-:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#172033;background:#eef2f7}
-*{box-sizing:border-box} body{margin:0;background:#eef2f7}
-header{background:#182235;color:white;padding:22px 20px}
-h1{margin:0;font-size:25px}.sub{opacity:.78;margin-top:6px}
-main{max-width:980px;margin:0 auto;padding:18px}
-.card{background:white;border-radius:22px;padding:18px;margin:14px 0;box-shadow:0 8px 25px rgba(20,35,55,.08)}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-label{display:block;font-weight:650;font-size:14px;color:#56657a;margin-bottom:7px}
-select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;border-radius:14px;background:#fff}
-.result{background:#1d293c;color:#fff;text-align:center;padding:25px;border-radius:20px}
-.result small{display:block;opacity:.72;letter-spacing:.08em}.value{font-size:52px;font-weight:800;margin:10px 0}
-.info{font-size:14px;color:#637085;text-align:center}
-.matrix{overflow:auto}.matrix table{border-collapse:collapse;width:100%;min-width:700px}.matrix th,.matrix td{padding:8px;border:1px solid #d7dee8;text-align:center}.matrix th{background:#edf3f8}
-.note{font-size:13px;color:#667085;line-height:1.45}
-.badge{display:inline-block;background:#dff1e3;color:#245c35;padding:7px 12px;border-radius:999px;font-weight:700;font-size:13px;margin-top:8px}
-.warn{color:#9b4b13;background:#fff4e8;border-left:4px solid #e57a2f}
-
-.photoBox{border:2px dashed #b9c6d6;border-radius:18px;padding:16px;background:#f8fafc}
-.photoActions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-button{appearance:none;border:0;border-radius:12px;padding:12px 16px;font-size:16px;font-weight:700;background:#1d6fa5;color:#fff;cursor:pointer}
-button.secondary{background:#e9eef5;color:#233044}
-button:disabled{opacity:.55;cursor:not-allowed}
-#platePreview{display:none;max-width:100%;max-height:420px;object-fit:contain;border-radius:14px;border:1px solid #d8e0ea;margin-top:12px}
-.ocrStatus{margin-top:10px;font-size:14px;color:#56657a}
-.ocrText{display:none;white-space:pre-wrap;max-height:220px;overflow:auto;background:#f5f8fb;border:1px solid #d8e0ea;border-radius:12px;padding:12px;margin-top:10px;font-size:12px}
-.detected{display:none;margin-top:12px;padding:12px;border-radius:14px;background:#eef7ff;border:1px solid #b9d8f2}
-.detected b{color:#17324a}
-@media(max-width:700px){.grid{grid-template-columns:1fr 1fr}.value{font-size:42px}}
+:root{
+  --bg:#e9edf4; --card:#fff; --ink:#253249; --muted:#657187;
+  --line:#d7dee9; --dark:#27354b; --accent:#2f7eb7;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#202d42;color:#fff;padding:24px 20px}
+header h1{margin:0;font-size:28px}
+header p{margin:6px 0 0;color:#cbd4e1;font-size:17px}
+main{max-width:1160px;margin:28px auto;padding:0 18px}
+.card{background:var(--card);border-radius:24px;padding:24px;margin:18px 0;box-shadow:0 10px 30px rgba(32,45,66,.10)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.grid.three{grid-template-columns:repeat(3,1fr)}
+@media(max-width:760px){.grid,.grid.three{grid-template-columns:1fr 1fr}.full{grid-column:1/-1}}
+label{display:block;font-weight:700;font-size:15px;color:#56647a;margin-bottom:7px}
+input,select{width:100%;padding:16px;border:1px solid var(--line);border-radius:16px;background:#fbfcfe;font-size:19px;color:#202b3b}
+input:focus,select:focus{outline:3px solid #b8d9f0;border-color:var(--accent)}
+.result{background:var(--dark);color:#fff;border-radius:24px;padding:28px;text-align:center;margin-top:18px}
+.result .small{letter-spacing:2px;color:#c5cfdd;font-size:14px}
+.result .big{font-size:56px;font-weight:800;margin:10px 0}
+.result .detail{font-size:18px;color:#d5dce6}
+.result.light{background:#eef3f8;color:#233149}
+.result.light .small{color:#66748a}
+.result.light .detail{color:#56647a}
+.section-title{font-size:20px;font-weight:800;margin:0 0 18px}
+.note{color:var(--muted);line-height:1.5;margin:12px 0 0}
+table{width:100%;border-collapse:collapse;margin-top:16px;overflow:hidden;border-radius:14px}
+th,td{border:1px solid var(--line);padding:10px;text-align:center}
+th{background:#edf2f7}
+footer{max-width:1160px;margin:18px auto 30px;padding:0 18px;color:#68758a;font-size:13px;line-height:1.5}
+.badge{display:inline-block;background:#e8f2fb;color:#23699b;padding:5px 10px;border-radius:999px;font-size:13px;font-weight:700;margin-left:8px}
+.hidden{display:none}
 </style>
 </head>
 <body>
-<header><h1>⚡ Icc Calculator</h1><div class="sub">230/400 V triphasé • Tables Schneider G39</div></header>
+<header>
+  <h1>⚡ Icc Calculator <span class="badge">230/400 V & 3×230 V</span></h1>
+  <p>Calcul simplifié du courant de court-circuit — transformateur et canalisation en aval</p>
+</header>
+
 <main>
-<div class="card">
-<label for="sourceMode">Source de l’Icc amont</label>
-<select id="sourceMode">
-  <option value="manual">Saisie manuelle de l’Icc</option>
-  <option value="transformer">Calcul depuis un transformateur</option>
-</select>
-<div class="note">Mode transformateur : Icc = (courant secondaire ÷ Ucc %) × 100.</div>
-</div>
+  <section class="card">
+    <h2 class="section-title">1. Alimentation / transformateur</h2>
+    <div class="grid">
+      <div>
+        <label for="mode">Mode de calcul</label>
+        <select id="mode">
+          <option value="transformer">Transformateur — calcul de l'Icc secondaire</option>
+          <option value="manual">Icc amont connu — saisie directe</option>
+        </select>
+      </div>
+      <div id="powerWrap">
+        <label for="power">Puissance transfo (kVA)</label>
+        <input id="power" type="number" inputmode="decimal" value="1000" min="1" step="1">
+      </div>
+      <div>
+        <label for="secondaryVoltage">Tension secondaire (V)</label>
+        <select id="secondaryVoltage">
+          <option value="400">400 V — réseau 230/400 V</option>
+          <option value="420" selected>420 V</option>
+          <option value="230">230 V — réseau 3×230 V</option>
+        </select>
+      </div>
+      <div id="uccWrap">
+        <label for="ucc">Tension de court-circuit Ucc (%)</label>
+        <input id="ucc" type="number" inputmode="decimal" value="6" min="0.1" step="0.01">
+      </div>
+      <div id="manualWrap" class="hidden full">
+        <label for="manualIcc">Icc amont connu (kA)</label>
+        <input id="manualIcc" type="number" inputmode="decimal" value="25" min="0.01" step="0.001">
+      </div>
+    </div>
 
-<div class="card" id="transformerCard" style="display:none">
-<div class="photoBox">
-<label for="platePhoto">📷 Photo de la plaque signalétique (facultatif)</label>
-<input id="platePhoto" type="file" accept="image/*">
-<img id="platePreview" alt="Aperçu de la plaque signalétique">
-<div class="photoActions">
-  <button type="button" id="ocrButton" class="secondary" disabled>Lire la plaque (OCR)</button>
-  <button type="button" id="applyDetected" disabled>Appliquer les valeurs détectées</button>
-</div>
-<div class="ocrStatus" id="ocrStatus">Ajoute une photo pour l’afficher. La lecture OCR reste à vérifier avant calcul.</div>
-<div class="detected" id="detectedValues"></div>
-<pre class="ocrText" id="ocrText" style="display:none"></pre>
-</div>
-<div class="grid">
-<div><label for="secondaryCurrent">Courant secondaire (A)</label><input id="secondaryCurrent" type="number" min="1" step="0.01" value="1374.64"></div>
-<div><label for="uccPercent">Tension de court-circuit Ucc (%)</label><input id="uccPercent" type="number" min="0.01" step="0.01" value="6"></div>
-<div><label for="transformerVoltage">Tension secondaire (V) — info</label><input id="transformerVoltage" type="number" min="1" step="1" value="420"></div>
-<div><label>Icc calculé au secondaire</label><div id="transformerIcc" style="font-size:24px;font-weight:800;padding:14px;border:1px solid #ccd5e0;border-radius:14px;background:#f5f8fb">22,9 kA</div></div>
-</div>
-<div class="note">Valeur théorique simplifiée au secondaire du transformateur, avant ajout des impédances/câbles en aval.</div>
-</div>
+    <div class="result" id="transformerResult">
+      <div class="small">ICC DISPONIBLE AU POINT AMONT</div>
+      <div class="big" id="iccSource">22,91 kA</div>
+      <div class="detail" id="sourceDetail">Courant secondaire : 1374,64 A • Ucc : 6 % • 420 V</div>
+    </div>
+    <p class="note">Formule transformateur : I<sub>n secondaire</sub> = S / (√3 × U<sub>secondaire</sub>) puis Icc = I<sub>n</sub> × 100 / Ucc.</p>
+  </section>
 
-<div class="card">
-<div class="grid">
-<div><label for="material">Conducteur</label><select id="material"><option value="Cu">Cuivre</option><option value="Al">Aluminium</option></select></div>
-<div><label for="section">Section</label><select id="section"></select></div>
-<div><label for="icc">Icc amont (kA)</label><input id="icc" type="number" min="1" max="100" step="0.01" value="25"></div>
-<div><label for="length">Longueur (m)</label><input id="length" type="number" min="0" max="1000" step="0.1" value="30"></div>
-</div>
-</div>
+  <section class="card">
+    <h2 class="section-title">2. Canalisation en aval</h2>
+    <div class="grid">
+      <div>
+        <label for="conductor">Conducteur</label>
+        <select id="conductor"><option value="cu">Cuivre</option><option value="al">Aluminium</option></select>
+      </div>
+      <div>
+        <label for="section">Section</label>
+        <select id="section">
+          <option>2.5</option><option>4</option><option>6</option><option>10</option><option>16</option>
+          <option selected>25</option><option>35</option><option>50</option><option>70</option><option>95</option>
+          <option>120</option><option>150</option><option>185</option><option>240</option><option>300</option>
+        </select>
+      </div>
+      <div>
+        <label for="length">Longueur (m)</label>
+        <input id="length" type="number" inputmode="decimal" value="30" min="0" step="0.1">
+      </div>
+      <div>
+        <label for="temperature">Température conducteur (°C)</label>
+        <input id="temperature" type="number" inputmode="decimal" value="20" min="-20" max="120" step="1">
+      </div>
+    </div>
 
-<div class="card">
-<label for="mode">Méthode de calcul</label>
-<select id="mode">
-<option value="interpolated">Interpolation précise (recommandée)</option>
-<option value="strict">Schneider strict (lecture tabulaire)</option>
-</select>
-<div class="note">L'interpolation calcule une valeur continue entre les valeurs des tables G39. Le mode strict reproduit la lecture par défaut / par excès.</div>
-</div>
-<div class="card result">
-<small>ICC EN BOUT DE LIGNE</small>
-<div class="value" id="result">—</div>
-<div id="details"></div>
-<div class="badge" id="modeBadge">Interpolation G39</div>
-</div>
+    <div class="result">
+      <div class="small">ICC EN BOUT DE LIGNE</div>
+      <div class="big" id="iccEnd">—</div>
+      <div class="detail" id="cableDetail">—</div>
+    </div>
 
-<div class="card">
-<label for="matrixIcc">Matrice rapide – Icc amont retenu</label>
-<select id="matrixIcc"></select>
-<div class="matrix" id="matrix"></div>
-</div>
-
-<div class="card note">
-<b>Lecture fidèle de la méthode de composition Schneider.</b>
-La longueur est sélectionnée par défaut dans la ligne de la section, puis l'Icc amont est retenu par excès dans la table centrale.
-La valeur affichée est la valeur tabulée correspondante. L'ancienne version utilisait une formule d'impédance simplifiée : elle pouvait être cohérente physiquement sans reproduire la valeur G39.
-</div>
-<div class="card note warn" id="status"></div>
-<div class="card note" style="text-align:center;margin-top:22px">
-<b>Icc Calculator — Réalisé par Mathieu Mercier © 2026</b><br>
-Outil développé à titre privé et indicatif. Les résultats doivent être vérifiés avant toute utilisation technique.
-L’utilisateur reste responsable de l’interprétation et de l’utilisation des résultats.
-</div>
+    <table>
+      <thead><tr><th>Longueur (m)</th><th>Icc calculé (kA)</th></tr></thead>
+      <tbody id="matrix"></tbody>
+    </table>
+    <p class="note">La longueur est calculée de façon continue : il n’y a pas d’arrondi sur des paliers de 10 m. La matrice ci-dessus est générée à titre de lecture rapide.</p>
+  </section>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<footer>
+  Réalisé par <strong>Mathieu Mercier</strong>. Cet outil est fourni pour un usage privé, responsable et indicatif. Les résultats doivent être vérifiés par une personne compétente et confrontés aux prescriptions réglementaires, aux données constructeur et aux conditions réelles de l’installation. L’auteur ne peut être tenu responsable d’une décision, d’un dimensionnement ou d’une intervention réalisée sur la seule base des résultats affichés.
+</footer>
+
 <script>
-(function(){
-"use strict";
+const $ = id => document.getElementById(id);
+const sqrt3 = Math.sqrt(3);
 
-/*
-  Schneider Electric – Guide de l'installation électrique, Fig. G39.
-  Méthode de composition 230/400 V triphasé.
-  Données cuivre intégrées ici pour reproduire la lecture tabulée.
-*/
-
-// Colonnes communes du tableau central : Icc aval pour chaque Icc amont.
-var upstreamRows=[100,90,80,70,60,50,40,35,30,25,20,15,10,7,5,4,3,2,1];
-
-// 22 colonnes de composition, dans l'ordre du tableau G39.
-var central={
-100:[93,90,87,82,77,70,62,54,45,37,29,22,17.0,12.6,9.3,6.7,4.9,3.5,2.5,1.8,1.3,0.9],
-90:[84,82,79,75,71,65,58,51,43,35,28,22,16.7,12.5,9.2,6.7,4.8,3.5,2.5,1.8,1.3,0.9],
-80:[75,74,71,68,64,59,54,47,40,34,27,21,16.3,12.2,9.1,6.6,4.8,3.5,2.5,1.8,1.3,0.9],
-70:[66,65,63,61,58,54,49,44,38,32,26,20,15.8,12.0,8.9,6.6,4.8,3.4,2.5,1.8,1.3,0.9],
-60:[57,56,55,53,51,48,44,39,35,29,24,20,15.2,11.6,8.7,6.5,4.7,3.4,2.5,1.8,1.3,0.9],
-50:[48,47,46,45,43,41,38,35,31,27,22,18.3,14.5,11.2,8.5,6.3,4.6,3.4,2.4,1.7,1.2,0.9],
-40:[39,38,38,37,36,34,32,30,27,24,20,16.8,13.5,10.6,8.1,6.1,4.5,3.3,2.4,1.7,1.2,0.9],
-35:[34,34,33,33,32,30,29,27,24,22,18.8,15.8,12.9,10.2,7.9,6.0,4.5,3.3,2.4,1.7,1.2,0.9],
-30:[29,29,29,28,27,27,25,24,22,20,17.3,14.7,12.2,9.8,7.6,5.8,4.4,3.2,2.4,1.7,1.2,0.9],
-25:[25,24,24,24,23,23,22,21,19.1,17.4,15.5,13.4,11.2,9.2,7.3,5.6,4.2,3.2,2.3,1.7,1.2,0.9],
-20:[20,20,19.4,19.2,18.8,18.4,17.8,17.0,16.1,14.9,13.4,11.8,10.1,8.4,6.8,5.3,4.1,3.1,2.3,1.7,1.2,0.9],
-15:[14.8,14.8,14.7,14.5,14.3,14.1,13.7,13.3,12.7,11.9,11.0,9.9,8.7,7.4,6.1,4.9,3.8,2.9,2.2,1.6,1.2,0.9],
-10:[9.9,9.9,9.8,9.8,9.7,9.6,9.4,9.2,8.9,8.5,8.0,7.4,6.7,5.9,5.1,4.2,3.4,2.7,2.0,1.5,1.1,0.8],
-7:[7.0,6.9,6.9,6.9,6.9,6.8,6.7,6.6,6.4,6.2,6.0,5.6,5.2,4.7,4.2,3.6,3.0,2.4,1.9,1.4,1.1,0.8],
-5:[5.0,5.0,5.0,4.9,4.9,4.9,4.9,4.8,4.7,4.6,4.5,4.3,4.0,3.7,3.4,3.0,2.5,2.1,1.7,1.3,1.0,0.8],
-4:[4.0,4.0,4.0,4.0,4.0,3.9,3.9,3.9,3.8,3.7,3.6,3.5,3.3,3.1,2.9,2.6,2.2,1.9,1.6,1.2,1.0,0.7],
-3:[3.0,3.0,3.0,3.0,3.0,3.0,2.9,2.9,2.9,2.9,2.8,2.7,2.6,2.5,2.3,2.1,1.9,1.6,1.4,1.1,0.9,0.7],
-2:[2.0,2.0,2.0,2.0,2.0,2.0,2.0,2.0,2.0,1.9,1.9,1.9,1.8,1.8,1.7,1.6,1.4,1.3,1.1,1.0,0.8,0.6],
-1:[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.9,0.9,0.9,0.8,0.8,0.7,0.6,0.6,0.5]
+// Résistances DC à 20 °C (ohm/km) pour conducteurs usuels.
+// La correction en température est appliquée ensuite.
+const resistance20 = {
+  cu:{2.5:7.41,4:4.61,6:3.08,10:1.83,16:1.15,25:0.727,35:0.524,50:0.387,70:0.268,95:0.193,120:0.153,150:0.124,185:0.0991,240:0.0754,300:0.0601},
+  al:{2.5:12.1,4:7.41,6:4.61,10:3.08,16:1.91,25:1.20,35:0.868,50:0.641,70:0.443,95:0.320,120:0.253,150:0.206,185:0.164,240:0.125,300:0.100}
 };
 
-// Longueurs correspondant aux 22 colonnes du tableau central (cuivre).
-// Les cellules vides de la source sont représentées par null.
-var copperLengths={
-"1.5":[null,null,null,null,null,null,null,null,null,null,null,null,null,1.3,1.8,2.6,3.6,5.2,7.3,10.3,14.6,21],
-"2.5":[null,null,null,null,null,null,null,null,null,null,null,1.1,1.5,2.1,3.0,4.3,6.1,8.6,12.1,17.2,24,34],
-"4":[null,null,null,null,null,null,null,null,null,null,1.2,1.7,2.4,3.4,4.9,6.9,9.7,13.7,19.4,27,39,55],
-"6":[null,null,null,null,null,null,null,null,null,null,1.8,2.6,3.6,5.2,7.3,10.3,14.6,21,29,41,58,82],
-"10":[null,null,null,null,null,null,null,null,null,2.2,3.0,4.3,6.1,8.6,12.2,17.2,24,34,49,69,97,137],
-"16":[null,null,null,null,null,null,null,null,1.7,2.4,3.4,4.9,6.9,9.7,13.8,19.4,27,39,55,78,110,155],
-"25":[null,null,null,null,null,1.3,1.9,2.7,3.8,5.4,7.6,10.8,15.2,21,30,43,61,86,121,172,243,343],
-"35":[null,null,null,null,null,1.9,2.7,3.8,5.3,7.5,10.6,15.1,21,30,43,60,85,120,170,240,340,480],
-"50":[null,null,null,null,1.8,2.6,3.6,5.1,7.2,10.2,14.4,20,29,41,58,82,115,163,231,326,461,null],
-"70":[null,null,null,null,2.7,3.8,5.3,7.5,10.7,15.1,21,30,43,60,85,120,170,240,340,null,null,null],
-"95":[null,null,null,2.6,3.6,5.1,7.2,10.2,14.5,20,29,41,58,82,115,163,231,326,461,null,null,null],
-"120":[null,1.6,2.3,3.2,4.6,6.5,9.1,12.9,18.3,26,37,52,73,103,146,206,291,412,null,null,null,null],
-"150":[1.2,1.8,2.5,3.5,5.0,7.0,9.9,14.0,19.8,28,40,56,79,112,159,224,317,448,null,null,null,null],
-"185":[1.5,2.1,2.9,4.2,5.9,8.3,11.7,16.6,23,33,47,66,94,133,187,265,374,529,null,null,null,null],
-"240":[1.8,2.6,3.7,5.2,7.3,10.3,14.6,21,29,41,58,83,117,165,233,330,466,659,null,null,null,null],
-"300":[2.2,3.1,4.4,6.2,8.8,12.4,17.6,25,35,50,70,99,140,198,280,396,561,null,null,null,null,null],
-"2x120":[2.3,3.2,4.6,6.5,9.1,12.9,18.3,26,37,52,73,103,146,206,292,412,583,null,null,null,null,null],
-"2x150":[2.5,3.5,5.0,7.0,9.9,14.0,20,28,40,56,79,112,159,224,317,448,634,null,null,null,null,null],
-"2x185":[2.9,4.2,5.9,8.3,11.7,16.6,23,33,47,66,94,133,187,265,375,530,749,null,null,null,null,null],
-"3x120":[3.4,4.9,6.9,9.7,13.7,19.4,27,39,55,77,110,155,219,309,438,619,null,null,null,null,null,null],
-"3x150":[3.7,5.3,7.5,10.5,14.9,21,30,42,60,84,119,168,238,336,476,672,null,null,null,null,null,null],
-"3x185":[4.4,6.2,8.8,12.5,17.6,25,35,50,70,100,141,199,281,398,562,null,null,null,null,null,null,null]
-};
+function fmt(n, d=2){ return Number(n).toLocaleString('fr-BE',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 
+function sourceCalc(){
+  const mode=$('mode').value;
+  $('powerWrap').classList.toggle('hidden',mode!=='transformer');
+  $('uccWrap').classList.toggle('hidden',mode!=='transformer');
+  $('manualWrap').classList.toggle('hidden',mode!=='manual');
 
-var aluminiumLengths={
-"2.5":[null,null,null,null,null,null,null,null,null,null,null,null,null,1.4,1.9,2.7,3.8,5.4,7.6,10.8,15.3,22],
-"4":[null,null,null,null,null,null,null,null,null,null,null,1.1,1.5,2.2,3.1,4.3,6.1,8.6,12.2,17.3,24,35],
-"6":[null,null,null,null,null,null,null,null,null,null,null,1.6,2.3,3.2,4.6,6.5,9.2,13.0,18.3,26,37,52],
-"10":[null,null,null,null,null,null,null,null,null,null,1.9,2.7,3.8,5.4,7.7,10.8,15.3,22,31,43,61,86],
-"16":[null,null,null,null,null,null,null,null,null,2.2,3.1,4.3,6.1,8.7,12.2,17.3,24,35,49,69,98,138],
-"25":[null,null,null,null,null,null,null,1.7,2.4,3.4,4.8,6.8,9.6,13.5,19.1,27,38,54,76,108,153,216],
-"35":[null,null,null,null,null,null,1.7,2.4,3.4,4.7,6.7,9.5,13.4,18.9,27,38,54,76,107,151,214,302],
-"50":[null,null,null,null,null,1.6,2.3,3.2,4.6,6.4,9.1,12.9,18.2,26,36,51,73,103,148,205,290,410],
-"70":[null,null,null,null,null,2.4,3.4,4.7,6.7,9.5,13.4,19.0,27,38,54,76,107,151,214,303,428,null],
-"95":[null,null,null,null,2.3,3.2,4.6,6.4,9.1,12.9,18.2,26,36,51,73,103,145,205,290,411,null,null],
-"120":[null,null,null,null,2.9,4.1,5.8,8.1,11.5,16.3,23,32,46,65,92,130,184,259,367,null,null,null],
-"150":[null,null,null,null,3.1,4.4,6.3,8.8,12.5,17.7,25,35,50,71,100,141,199,282,399,null,null,null],
-"185":[null,null,null,2.6,3.7,5.2,7.4,10.4,14.8,21,30,42,59,83,118,167,236,333,471,null,null,null],
-"240":[1.2,1.6,2.3,3.3,4.6,6.5,9.2,13.0,18.4,26,37,52,73,104,147,208,294,415,null,null,null,null],
-"300":[1.4,2.0,2.8,3.9,5.5,7.8,11.1,15.6,22,31,44,62,88,125,177,250,353,499,null,null,null,null],
-"2x120":[1.4,2.0,2.9,4.1,5.8,8.1,11.5,16.3,23,33,46,65,92,130,184,260,367,519,null,null,null,null],
-"2x150":[1.6,2.2,3.1,4.4,6.3,8.8,12.5,17.7,25,35,50,71,100,141,200,280,399,null,null,null,null,null],
-"2x185":[1.9,2.6,3.7,5.2,7.4,10.5,14.8,21,30,42,59,83,118,167,236,334,472,null,null,null,null,null],
-"2x240":[2.3,3.3,4.6,6.5,9.2,13.0,18.4,26,37,52,74,104,147,208,294,415,587,null,null,null,null,null],
-"3x120":[2.2,3.1,4.3,6.1,8.6,12.2,17.3,24,34,49,69,97,138,195,275,389,551,null,null,null,null,null],
-"3x150":[2.3,3.3,4.7,6.6,9.4,13.3,18.8,27,37,53,75,106,150,212,299,423,598,null,null,null,null,null],
-"3x185":[2.8,3.9,5.5,7.8,11.1,15.7,22,31,44,63,89,125,177,250,354,500,707,null,null,null,null,null],
-"3x240":[3.5,4.9,6.9,9.8,13.8,19.5,28,39,55,78,110,156,220,312,441,623,null,null,null,null,null,null]
-};
-
-var sections=Object.keys(copperLengths);
-var sectionEl=document.getElementById("section"),
-    materialEl=document.getElementById("material"),
-    iccEl=document.getElementById("icc"),
-    lengthEl=document.getElementById("length"),
-    resultEl=document.getElementById("result"),
-    detailsEl=document.getElementById("details"),
-    mi=document.getElementById("matrixIcc"),
-    statusEl=document.getElementById("status"),
-    sourceModeEl=document.getElementById("sourceMode"),
-    transformerCard=document.getElementById("transformerCard"),
-    secondaryCurrentEl=document.getElementById("secondaryCurrent"),
-    uccPercentEl=document.getElementById("uccPercent"),
-    transformerIccEl=document.getElementById("transformerIcc"),
-    transformerVoltageEl=document.getElementById("transformerVoltage"),
-    platePhotoEl=document.getElementById("platePhoto"),
-    platePreviewEl=document.getElementById("platePreview"),
-    ocrButtonEl=document.getElementById("ocrButton"),
-    applyDetectedEl=document.getElementById("applyDetected"),
-    ocrStatusEl=document.getElementById("ocrStatus"),
-    ocrTextEl=document.getElementById("ocrText"),
-    detectedValuesEl=document.getElementById("detectedValues");
-
-
-var detectedPlate={current:null,ucc:null,voltage:null};
-
-
-function parseNumberFR(s){
-  if(!s) return null;
-  var clean=String(s).replace(/\s/g,"").replace(",",".").replace(/[^0-9.\-]/g,"");
-  var n=Number(clean);
-  return isFinite(n)?n:null;
-}
-
-function numFromText(s){
-  var m=String(s||"").match(/(\d+(?:[.,]\d+)?)/);
-  return m ? parseNumberFR(m[1]) : null;
-}
-
-function lineText(line){
-  if(!line) return "";
-  if(line.text) return line.text;
-  if(line.words) return line.words.map(function(w){return w.text;}).join(" ");
-  return "";
-}
-
-function bboxCenter(item){
-  var b=item && item.bbox;
-  if(!b) return null;
-  return (b.x0+b.x1)/2;
-}
-
-function detectPlateValues(text, data){
-  var result={current:null,ucc:null,voltage:null,power:null,confidence:0,reason:""};
-  var lines=(data && data.lines && data.lines.length ? data.lines : [])
-    .map(function(l){return {text:lineText(l).trim().replace(/\s+/g," "), raw:l};})
-    .filter(function(l){return l.text;});
-
-  // --- 1. Repérer les colonnes HV / LV dans la géométrie OCR ---
-  var words=(data && data.words) ? data.words : [];
-  var hvX=null, lvX=null;
-  words.forEach(function(w){
-    var t=String(w.text||"").toUpperCase().replace(/[^A-Z]/g,"");
-    var x=bboxCenter(w);
-    if(x===null) return;
-    if((t==="HV" || t==="HT" || t==="PRIMARY") && hvX===null) hvX=x;
-    if((t==="LV" || t==="BT" || t==="SECONDARY") && lvX===null) lvX=x;
-  });
-
-  // --- 2. Extraire les courants nominal primaire/secondaire par POSITION ---
-  // On ne choisit plus "la plus grande valeur". Si la plaque est structurée HV/LV,
-  // chaque valeur est associée à la colonne la plus proche.
-  var currentCandidates=[];
-  words.forEach(function(w){
-    var raw=String(w.text||"");
-    var v=numFromText(raw);
-    var x=bboxCenter(w);
-    if(v===null || x===null) return;
-
-    // un courant nominal secondaire de transfo est souvent dans cette plage.
-    // On garde large pour éviter de rejeter les gros transformateurs.
-    if(v>0 && v<20000){
-      var distLV=(lvX===null)?Infinity:Math.abs(x-lvX);
-      var distHV=(hvX===null)?Infinity:Math.abs(x-hvX);
-      if(distLV<distHV && distLV<350) currentCandidates.push({value:v,score:4,source:"colonne LV"});
-      else if(distHV<distLV && distHV<350) currentCandidates.push({value:v,score:-4,source:"colonne HV"});
-    }
-  });
-
-  // Fallback texte : seulement si la géométrie ne permet pas de conclure.
-  if(!currentCandidates.some(function(c){return c.score>0;})){
-    for(var i=0;i<lines.length;i++){
-      var t=lines[i].text;
-      if(/LV|BT|SECONDARY|SECONDAIRE/i.test(t)){
-        var near=t+" "+(lines[i+1] ? lines[i+1].text : "");
-        var ms=near.match(/(\d+(?:[.,]\d+)?)\s*A\b/ig)||[];
-        ms.forEach(function(m){
-          var v=numFromText(m);
-          if(v!==null) currentCandidates.push({value:v,score:3,source:"ligne LV"});
-        });
-      }
-    }
-  }
-
-  var secondary=currentCandidates
-    .filter(function(c){return c.score>0;})
-    .sort(function(a,b){return b.score-a.score;});
-
-  if(secondary.length){
-    // Dédupliquer les lectures OCR répétées puis prendre la meilleure candidate.
-    var seen={};
-    secondary=secondary.filter(function(c){
-      var k=c.value.toFixed(3);
-      if(seen[k]) return false;
-      seen[k]=true; return true;
-    });
-    result.current=secondary[0].value;
-    result.confidence+=3;
-    result.reason="courant associé au côté BT/LV";
-  }
-
-  // --- 3. Ucc / Uk / Impedance : uniquement près du libellé ---
-  for(var j=0;j<lines.length;j++){
-    var t=lines[j].text;
-    if(/IMPEDANCE|UCC|SHORT\s*CIRCUIT|COURT[-\s]*CIRCUIT|\bUK\b/i.test(t)){
-      var block=t+" "+(lines[j+1]?lines[j+1].text:"")+" "+(lines[j+2]?lines[j+2].text:"");
-      var pm=block.match(/(\d+(?:[.,]\d+)?)\s*%/);
-      if(pm){
-        var u=parseNumberFR(pm[1]);
-        if(u!==null && u>0 && u<=25){
-          result.ucc=u; result.confidence+=3; break;
-        }
-      }
-    }
-  }
-
-  // --- 4. Tension secondaire : près de LV/BT ---
-  for(var k=0;k<lines.length;k++){
-    var lt=lines[k].text;
-    if(/LV|BT|SECONDARY|SECONDAIRE/i.test(lt)){
-      var block2=lt+" "+(lines[k+1]?lines[k+1].text:"");
-      var vm=block2.match(/(\d{2,4}(?:[.,]\d+)?)\s*V\b/i);
-      if(vm){
-        var vv=parseNumberFR(vm[1]);
-        if(vv>=100 && vv<=1000){ result.voltage=vv; result.confidence+=2; break; }
-      }
-    }
-  }
-
-  // --- 5. Puissance ---
-  for(var p=0;p<lines.length;p++){
-    var km=(lines[p].text+" "+(lines[p+1]?lines[p+1].text:"")).match(/(\d+(?:[.,]\d+)?)\s*kVA\b/i);
-    if(km){ result.power=parseNumberFR(km[1]); break; }
-  }
-
-  return result;
-}
-
-function showDetected(){
-  var parts=[];
-  if(detectedPlate.power!==null) parts.push("Puissance : <b>"+detectedPlate.power.toLocaleString("fr-BE",{maximumFractionDigits:2})+" kVA</b>");
-  if(detectedPlate.voltage!==null) parts.push("Tension secondaire : <b>"+detectedPlate.voltage.toLocaleString("fr-BE",{maximumFractionDigits:0})+" V</b>");
-  if(detectedPlate.current!==null) parts.push("Courant secondaire (BT/LV) : <b>"+detectedPlate.current.toLocaleString("fr-BE",{maximumFractionDigits:2})+" A</b>");
-  if(detectedPlate.ucc!==null) parts.push("Ucc / Uk : <b>"+detectedPlate.ucc.toLocaleString("fr-BE",{maximumFractionDigits:2})+" %</b>");
-
-  var ready=(detectedPlate.current!==null && detectedPlate.ucc!==null);
-  if(parts.length){
-    detectedValuesEl.style.display="block";
-    detectedValuesEl.innerHTML="<b>Valeurs détectées — à vérifier sur la plaque :</b><br>"+parts.join("<br>")+
-      (ready ? "<br><b>Icc théorique : "+fmt((detectedPlate.current/detectedPlate.ucc)*100/1000)+" kA</b>" :
-      "<br><span class='note'>Détection incomplète : aucune valeur ne sera appliquée automatiquement.</span>");
-    applyDetectedEl.disabled=!ready;
+  const U=+$('secondaryVoltage').value;
+  let iccA, detail;
+  if(mode==='transformer'){
+    const S=+$('power').value*1000;
+    const ucc=+$('ucc').value;
+    const In=S/(sqrt3*U);
+    iccA=In*100/ucc;
+    detail=`Courant secondaire : ${fmt(In,2)} A • Ucc : ${fmt(ucc,2)} % • ${fmt(U,0)} V`;
   }else{
-    detectedValuesEl.style.display="none";
-    applyDetectedEl.disabled=true;
+    iccA=+$('manualIcc').value*1000;
+    detail=`Icc amont saisi : ${fmt(iccA/1000,3)} kA • ${fmt(U,0)} V`;
   }
+  $('iccSource').textContent=fmt(iccA/1000,2)+' kA';
+  $('sourceDetail').textContent=detail;
+  return {iccA,U};
 }
 
-platePhotoEl.addEventListener("change",function(){
-  var file=platePhotoEl.files && platePhotoEl.files[0];
-  detectedPlate={current:null,ucc:null,voltage:null};
-  detectedValuesEl.style.display="none";
-  applyDetectedEl.disabled=true;
-  ocrTextEl.style.display="none";
-  if(!file){
-    platePreviewEl.style.display="none";
-    ocrButtonEl.disabled=true;
-    ocrStatusEl.textContent="Ajoute une photo pour l’afficher. La lecture OCR reste à vérifier avant calcul.";
-    return;
-  }
-  var reader=new FileReader();
-  reader.onload=function(e){
-    platePreviewEl.src=e.target.result;
-    platePreviewEl.style.display="block";
-    ocrButtonEl.disabled=false;
-    ocrStatusEl.textContent="Photo chargée. Tu peux lancer la lecture OCR.";
-  };
-  reader.readAsDataURL(file);
-});
+function cableIcc(Loverride=null){
+  const {iccA,U}=sourceCalc();
+  const metal=$('conductor').value;
+  const S=+$('section').value;
+  const L=(Loverride===null?+$('length').value:+Loverride);
+  const T=+$('temperature').value;
 
-ocrButtonEl.addEventListener("click",async function(){
-  if(!platePreviewEl.src || !window.Tesseract){
-    ocrStatusEl.textContent="OCR indisponible. Vérifie ta connexion internet puis réessaie.";
-    return;
-  }
-  try{
-    ocrButtonEl.disabled=true;
-    applyDetectedEl.disabled=true;
-    ocrStatusEl.textContent="Lecture de la plaque en cours…";
-    var result=await Tesseract.recognize(platePreviewEl.src,"eng+fra",{
-      logger:function(m){
-        if(m.status==="recognizing text" && typeof m.progress==="number"){
-          ocrStatusEl.textContent="Lecture de la plaque… "+Math.round(m.progress*100)+" %";
-        }
-      }
-    });
-    var text=(result && result.data && result.data.text)||"";
-    // Le texte OCR brut est volontairement masqué pour garder l'interface propre.
-    ocrTextEl.textContent=text;
-    ocrTextEl.style.display="none";
-    detectedPlate=detectPlateValues(text, result.data);
-    showDetected();
-    if(detectedPlate.current!==null || detectedPlate.ucc!==null || detectedPlate.voltage!==null){
-      ocrStatusEl.textContent=(detectedPlate.current!==null && detectedPlate.ucc!==null) ? "Lecture terminée. Vérifie les valeurs puis applique-les." : "Lecture partielle : aucune application automatique tant que le courant secondaire et Ucc ne sont pas clairement détectés.";
-    }else{
-      ocrStatusEl.textContent="Texte lu, mais les valeurs utiles n’ont pas été identifiées automatiquement. Tu peux les saisir manuellement.";
-    }
-  }catch(err){
-    console.error(err);
-    ocrStatusEl.textContent="La lecture OCR a échoué. Essaie une photo plus nette et bien cadrée.";
-  }finally{
-    ocrButtonEl.disabled=false;
-  }
-});
+  if(!iccA || !U || !S) return 0;
 
-applyDetectedEl.addEventListener("click",function(){
-  if(detectedPlate.current===null || detectedPlate.ucc===null){
-    ocrStatusEl.textContent="Application refusée : courant secondaire et Ucc doivent être clairement détectés.";
-    return;
-  }
-  secondaryCurrentEl.value=detectedPlate.current;
-  uccPercentEl.value=detectedPlate.ucc;
-  if(detectedPlate.voltage!==null) transformerVoltageEl.value=detectedPlate.voltage;
-  refreshSource();
-  update();
-  ocrStatusEl.textContent="Valeurs détectées appliquées. Vérifie-les sur la plaque avant utilisation.";
-});
+  // Impédance équivalente de la source : Zs = U / (√3 × Icc)
+  const Zs=U/(sqrt3*iccA);
 
-sections.forEach(function(s){
-  var o=document.createElement("option");
-  o.value=s;o.textContent=s+" mm²";
-  sectionEl.appendChild(o);
-});
-sectionEl.value="25";
+  // R câble : R20 corrigée en température, aller-retour pour la boucle de défaut triphasée simplifiée.
+  const alpha=metal==='cu'?0.00393:0.00403;
+  const R20=resistance20[metal][S]/1000;
+  const R=R20*(1+alpha*(T-20))*L*2;
 
-function refreshSections(){
-  var table=(materialEl.value==="Cu")?copperLengths:aluminiumLengths;
-  var current=sectionEl.value;
-  sectionEl.innerHTML="";
-  Object.keys(table).forEach(function(s){
-    var o=document.createElement("option");o.value=s;o.textContent=s+" mm²";sectionEl.appendChild(o);
+  // Réactance simplifiée typique basse tension. Elle reste faible mais est conservée pour éviter
+  // une interpolation arbitraire et garder un calcul continu de l'impédance.
+  const X=0.00008*L*2;
+
+  const Ztotal=Math.sqrt(Math.pow(Zs+R,2)+Math.pow(X,2));
+  const Iend=U/(sqrt3*Ztotal);
+
+  $('iccEnd').textContent=fmt(Iend/1000,2)+' kA';
+  $('cableDetail').textContent=`${metal==='cu'?'Cuivre':'Aluminium'} • ${S} mm² • ${fmt(L,1)} m • Icc amont ${fmt(iccA/1000,2)} kA`;
+
+  return Iend;
+}
+
+function refresh(){
+  sourceCalc();
+  cableIcc();
+  const body=$('matrix');
+  body.innerHTML='';
+  [0,10,20,30,40,50,75,100,150,200,300,400,500].forEach(L=>{
+    const v=cableIcc(L);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${L}</td><td>${fmt(v/1000,2)}</td>`;
+    body.appendChild(tr);
   });
-  if(table[current]) sectionEl.value=current;
-  else if(table["25"]) sectionEl.value="25";
-  else sectionEl.selectedIndex=0;
-}
-materialEl.addEventListener("change",function(){refreshSections();update();});
-
-upstreamRows.forEach(function(v){
-  var o=document.createElement("option");
-  o.value=v;o.textContent=v+" kA";
-  mi.appendChild(o);
-});
-mi.value="25";
-
-function calculateTransformerIcc(){
-  var secondary=Number(secondaryCurrentEl.value);
-  var ucc=Number(uccPercentEl.value);
-  if(!(secondary>0) || !(ucc>0)) return null;
-  // Formule simple demandée : Icc(A) = (I secondaire / Ucc %) × 100
-  return (secondary/ucc)*100/1000; // conversion A -> kA
+  cableIcc();
 }
 
-function refreshSource(){
-  var isTransformer=sourceModeEl.value==="transformer";
-  transformerCard.style.display=isTransformer?"block":"none";
-  iccEl.readOnly=isTransformer;
-  iccEl.style.background=isTransformer?"#f5f8fb":"#fff";
-  if(isTransformer){
-    var kA=calculateTransformerIcc();
-    if(kA!==null){
-      iccEl.value=kA.toFixed(3);
-      transformerIccEl.textContent=fmt(kA)+" kA";
-    }else{
-      transformerIccEl.textContent="—";
-    }
-  }
-}
-
-sourceModeEl.addEventListener("change",function(){refreshSource();update();});
-secondaryCurrentEl.addEventListener("input",function(){refreshSource();update();});
-uccPercentEl.addEventListener("input",function(){refreshSource();update();});
-transformerVoltageEl.addEventListener("input",function(){update();});
-
-function fmt(v){
-  return Number(v).toLocaleString("fr-BE",{minimumFractionDigits:1,maximumFractionDigits:1});
-}
-
-function upstreamByExcess(v){
-  v=Number(v);
-  // Tableau ordonné du plus grand au plus petit : prendre la plus petite valeur >= v.
-  for(var i=upstreamRows.length-1;i>=0;i--){
-    if(upstreamRows[i]>=v) return upstreamRows[i];
-  }
-  return null; // au-delà de 100 kA
-}
-
-function lengthByDefault(lengths,L){
-  var best=null,bestIndex=-1;
-  for(var i=0;i<lengths.length;i++){
-    var x=lengths[i];
-    if(x!==null && x<=L && (best===null || x>best)){best=x;bestIndex=i;}
-  }
-  return bestIndex<0?null:{value:best,index:bestIndex};
-}
-
-function interpolateAtLength(lengths, values, L){
-  var pts=[];
-  for(var i=0;i<lengths.length;i++){
-    if(lengths[i]!==null && values[i]!==undefined && values[i]!==null){
-      pts.push({x:Number(lengths[i]),y:Number(values[i])});
-    }
-  }
-  if(!pts.length) return null;
-  pts.sort(function(a,b){return a.x-b.x;});
-  if(L<=pts[0].x) return pts[0].y;
-  if(L>=pts[pts.length-1].x) return pts[pts.length-1].y;
-  for(var j=0;j<pts.length-1;j++){
-    var a=pts[j],b=pts[j+1];
-    if(L>=a.x && L<=b.x){
-      var t=(L-a.x)/(b.x-a.x);
-      return a.y+t*(b.y-a.y);
-    }
-  }
-  return null;
-}
-
-function interpolateUpstream(valuesByRow, I, lengths, L){
-  var rows=upstreamRows.slice().sort(function(a,b){return a-b;});
-  if(I<rows[0]) I=rows[0];
-  if(I>rows[rows.length-1]) I=rows[rows.length-1];
-
-  var low=rows[0], high=rows[rows.length-1];
-  for(var i=0;i<rows.length-1;i++){
-    if(I>=rows[i] && I<=rows[i+1]){low=rows[i];high=rows[i+1];break;}
-  }
-  var yLow=interpolateAtLength(lengths,valuesByRow[low],L);
-  var yHigh=interpolateAtLength(lengths,valuesByRow[high],L);
-  if(yLow===null || yHigh===null) return null;
-  if(high===low) return yLow;
-  return yLow+(I-low)*(yHigh-yLow)/(high-low);
-}
-
-function calculate(){
-  var I=Number(iccEl.value), L=Number(lengthEl.value);
-  var mode=document.getElementById("mode").value;
-  if(!(I>0 && L>=0)) return {error:"Vérifie les valeurs saisies."};
-  var table=(materialEl.value==="Cu")?copperLengths:aluminiumLengths;
-  var lengths=table[sectionEl.value];
-  if(!lengths) return {error:"Cette section n'est pas disponible pour le matériau sélectionné."};
-
-  if(mode==="strict"){
-    var row=upstreamByExcess(I);
-    if(row===null) return {error:"Icc amont hors plage de la table G39 (1 à 100 kA)."};
-    var col=lengthByDefault(lengths,L);
-    if(!col) return {error:"Longueur trop faible pour une lecture tabulée avec cette section."};
-    return {value:central[row][col.index], upstream:row, length:col.value, strict:true};
-  }
-
-  var value=interpolateUpstream(central,I,lengths,L);
-  if(value===null) return {error:"Impossible d'interpoler cette combinaison."};
-  return {value:value, upstream:I, length:L, strict:false};
-}
-
-function update(){
-  var modeEl=document.getElementById("mode");
-  var badge=document.getElementById("modeBadge");
-  var r=calculate();
-  if(r.error){
-    resultEl.textContent="—";detailsEl.textContent=r.error;statusEl.textContent=r.error;
-  }else{
-    resultEl.textContent=fmt(r.value)+" kA";
-    if(r.strict){
-      detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • longueur retenue "+fmt(r.length)+" m • Icc amont retenu "+fmt(r.upstream)+" kA";
-      badge.textContent="Mode Schneider strict";
-      statusEl.textContent="Lecture G39 stricte : longueur retenue par défaut et Icc amont retenu par excès.";
-    }else{
-      var sourceText=sourceModeEl.value==="transformer"
-        ? "Icc transfo "+fmt(r.upstream)+" kA ("+fmt(Number(secondaryCurrentEl.value))+" A / "+fmt(Number(uccPercentEl.value))+" % × 100)"
-        : "Icc amont "+fmt(r.upstream)+" kA";
-      detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • "+fmt(r.length)+" m • "+sourceText;
-      badge.textContent="Interpolation G39";
-      statusEl.textContent="Valeur interpolée entre les points disponibles des tables G39 : pas de palier artificiel entre deux longueurs ou deux Icc.";
-    }
-  }
-  buildMatrix();
-}
-function buildMatrix(){
-  var table=(materialEl.value==="Cu")?copperLengths:aluminiumLengths;
-  var lengths=table[sectionEl.value];
-  if(!lengths){document.getElementById("matrix").innerHTML="<p class='note'>Section indisponible pour ce matériau.</p>";return;}
-  var row=Number(mi.value);
-  var allRows=central;
-  var max=500, h="<table><thead><tr><th>Longueur</th>";
-  for(var l=0;l<=max;l+=1) h+="<th>"+l+" m</th>";
-  h+="</tr></thead><tbody><tr><th>Icc aval<br><small>Icc amont "+fmt(row)+" kA</small></th>";
-  for(var m=0;m<=max;m+=1){
-    var v=interpolateAtLength(lengths,allRows[row],m);
-    h+="<td>"+(v===null?"—":fmt(v))+"</td>";
-  }
-  h+="</tr></tbody></table>";
-  document.getElementById("matrix").innerHTML=h;
-}
-refreshSource();
-update();
-})();
+['mode','power','secondaryVoltage','ucc','manualIcc','conductor','section','length','temperature']
+.forEach(id=>$(id).addEventListener('input',refresh));
+$('mode').addEventListener('change',refresh);
+$('secondaryVoltage').addEventListener('change',refresh);
+$('conductor').addEventListener('change',refresh);
+$('section').addEventListener('change',refresh);
+refresh();
 </script>
 </body>
 </html>
