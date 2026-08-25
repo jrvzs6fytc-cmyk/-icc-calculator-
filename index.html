@@ -58,7 +58,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </div>
 <div class="ocrStatus" id="ocrStatus">Ajoute une photo pour l’afficher. La lecture OCR reste à vérifier avant calcul.</div>
 <div class="detected" id="detectedValues"></div>
-<pre class="ocrText" id="ocrText"></pre>
+<pre class="ocrText" id="ocrText" style="display:none"></pre>
 </div>
 <div class="grid">
 <div><label for="secondaryCurrent">Courant secondaire (A)</label><input id="secondaryCurrent" type="number" min="1" step="0.01" value="1374.64"></div>
@@ -229,63 +229,107 @@ var sectionEl=document.getElementById("section"),
 
 var detectedPlate={current:null,ucc:null,voltage:null};
 
+
 function parseNumberFR(s){
   if(!s) return null;
-  s=String(s).replace(/\s/g,"").replace(",",".").replace(/[^0-9.\-]/g,"");
-  var n=Number(s);
+  var clean=String(s).replace(/\s/g,"").replace(",",".").replace(/[^0-9.\-]/g,"");
+  var n=Number(clean);
   return isFinite(n)?n:null;
 }
 
-function findValueNear(lines, patterns, unitPattern){
-  for(var i=0;i<lines.length;i++){
-    var line=lines[i];
-    if(patterns.some(function(p){return p.test(line);})){
-      var block=line+" "+(lines[i+1]||"")+" "+(lines[i-1]||"");
-      var m=block.match(unitPattern);
-      if(m) return parseNumberFR(m[1]);
-    }
-  }
-  return null;
+function extractNumbersWithUnit(line, unit){
+  var re=new RegExp("(\\d+(?:[.,]\\d+)?)\\s*"+unit+"\\b","gi"), out=[], m;
+  while((m=re.exec(line))!==null) out.push(parseNumberFR(m[1]));
+  return out.filter(function(v){return v!==null;});
 }
 
 function detectPlateValues(text){
-  var lines=text.split(/\r?\n/).map(function(x){return x.trim();}).filter(Boolean);
-  var current=findValueNear(
-    lines,
-    [/NOMINAL\s*CURRENT/i,/CURRENT\s*NOMINAL/i,/COURANT\s*NOMINAL/i],
-    /(\d+(?:[.,]\d+)?)\s*A\b/i
-  );
-  var ucc=findValueNear(
-    lines,
-    [/IMPEDANCE/i,/UCC/i,/UK\b/i,/SHORT\s*CIRCUIT/i,/COURT[-\s]*CIRCUIT/i],
-    /(\d+(?:[.,]\d+)?)\s*%/
-  );
-  var voltage=findValueNear(
-    lines,
-    [/LV\s*\(?V\)?/i,/SECONDARY/i,/TENSION\s*SECONDAIRE/i],
-    /(\d+(?:[.,]\d+)?)\s*V\b/i
-  );
+  var lines=text.split(/\r?\n/).map(function(x){return x.trim().replace(/\s+/g," ");}).filter(Boolean);
+  var result={current:null,ucc:null,voltage:null,power:null,confidence:0};
+  var currentCandidates=[];
 
-  // Fallback prudent : une ligne contenant clairement "420 V", "400 V", etc.
-  if(voltage===null){
-    for(var i=0;i<lines.length;i++){
-      if(/LV|SECONDARY|SECONDAIRE/i.test(lines[i])){
-        var mv=lines[i].match(/(\d{2,4}(?:[.,]\d+)?)\s*V\b/i);
-        if(mv){voltage=parseNumberFR(mv[1]);break;}
+  // 1) Cherche explicitement une ligne de courant nominal.
+  // Si deux courants sont présents, on considère généralement la valeur la plus élevée
+  // comme le côté secondaire BT, mais on ne l'applique que comme proposition.
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i];
+    if(/NOMINAL\s*CURRENT|COURANT\s*NOMINAL|CURRENT\s*NOMINAL/i.test(line)){
+      var nums=extractNumbersWithUnit(line,"A");
+      nums.forEach(function(n){ currentCandidates.push({value:n,line:i,context:line}); });
+      // Certaines plaques mettent les valeurs sur la ligne suivante.
+      if(!nums.length){
+        var near=(lines[i+1]||"")+" "+(lines[i+2]||"");
+        extractNumbersWithUnit(near,"A").forEach(function(n){currentCandidates.push({value:n,line:i+1,context:near});});
       }
     }
   }
-  return {current:current,ucc:ucc,voltage:voltage};
+
+  // 2) Recherche alternative : lignes contenant clairement LV/BT + A.
+  for(var j=0;j<lines.length;j++){
+    var l=lines[j];
+    if(/\b(LV|BT|SECONDARY|SECONDAIRE)\b/i.test(l)){
+      extractNumbersWithUnit(l,"A").forEach(function(n){
+        currentCandidates.push({value:n,line:j,context:l,secondaryHint:true});
+      });
+      var near2=(lines[j+1]||"");
+      extractNumbersWithUnit(near2,"A").forEach(function(n){
+        currentCandidates.push({value:n,line:j+1,context:l+" "+near2,secondaryHint:true});
+      });
+    }
+  }
+
+  // Priorité : candidat avec indice secondaire, sinon courant nominal le plus élevé.
+  if(currentCandidates.length){
+    var hinted=currentCandidates.filter(function(c){return c.secondaryHint;});
+    var pool=hinted.length?hinted:currentCandidates;
+    pool.sort(function(a,b){return b.value-a.value;});
+    result.current=pool[0].value;
+    result.confidence += hinted.length?2:1;
+  }
+
+  // 3) Ucc / Uk / impedance : priorité à la ligne contenant IMPEDANCE.
+  for(var k=0;k<lines.length;k++){
+    var li=lines[k];
+    if(/IMPEDANCE|SHORT\s*CIRCUIT\s*VOLTAGE|COURT[-\s]*CIRCUIT|UCC|U[Kk]\s*%?|\bUK\b/i.test(li)){
+      var block=li+" "+(lines[k+1]||"");
+      var m=block.match(/(\d+(?:[.,]\d+)?)\s*%/);
+      if(m){
+        var u=parseNumberFR(m[1]);
+        if(u!==null && u>0 && u<=25){ result.ucc=u; result.confidence+=2; break; }
+      }
+    }
+  }
+
+  // 4) Tension secondaire : ligne LV / BT / SECONDARY, priorité aux tensions réalistes BT.
+  for(var v=0;v<lines.length;v++){
+    var lvline=lines[v];
+    if(/\b(LV|BT|SECONDARY|SECONDAIRE)\b/i.test(lvline)){
+      var vals=extractNumbersWithUnit(lvline,"V");
+      if(!vals.length) vals=extractNumbersWithUnit((lines[v+1]||""),"V");
+      var realistic=vals.filter(function(n){return n>=100 && n<=1000;});
+      if(realistic.length){ result.voltage=realistic[0]; result.confidence+=1; break; }
+    }
+  }
+
+  // 5) Puissance transformateur.
+  for(var p=0;p<lines.length;p++){
+    var pm=(lines[p]+" "+(lines[p+1]||"")).match(/(\d+(?:[.,]\d+)?)\s*kVA\b/i);
+    if(pm){ result.power=parseNumberFR(pm[1]); break; }
+  }
+
+  return result;
 }
 
 function showDetected(){
   var parts=[];
-  if(detectedPlate.current!==null) parts.push("Courant secondaire : <b>"+detectedPlate.current.toLocaleString("fr-BE",{maximumFractionDigits:2})+" A</b>");
-  if(detectedPlate.ucc!==null) parts.push("Ucc : <b>"+detectedPlate.ucc.toLocaleString("fr-BE",{maximumFractionDigits:2})+" %</b>");
+  if(detectedPlate.power!==null) parts.push("Puissance : <b>"+detectedPlate.power.toLocaleString("fr-BE",{maximumFractionDigits:2})+" kVA</b>");
   if(detectedPlate.voltage!==null) parts.push("Tension secondaire : <b>"+detectedPlate.voltage.toLocaleString("fr-BE",{maximumFractionDigits:0})+" V</b>");
+  if(detectedPlate.current!==null) parts.push("Courant secondaire proposé : <b>"+detectedPlate.current.toLocaleString("fr-BE",{maximumFractionDigits:2})+" A</b>");
+  if(detectedPlate.ucc!==null) parts.push("Ucc / Uk : <b>"+detectedPlate.ucc.toLocaleString("fr-BE",{maximumFractionDigits:2})+" %</b>");
+
   if(parts.length){
     detectedValuesEl.style.display="block";
-    detectedValuesEl.innerHTML="<b>Valeurs détectées — à confirmer :</b><br>"+parts.join("<br>");
+    detectedValuesEl.innerHTML="<b>Valeurs détectées — à vérifier avant application :</b><br>"+parts.join("<br>");
     applyDetectedEl.disabled=false;
   }else{
     detectedValuesEl.style.display="none";
@@ -332,12 +376,13 @@ ocrButtonEl.addEventListener("click",async function(){
       }
     });
     var text=(result && result.data && result.data.text)||"";
+    // Le texte OCR brut est volontairement masqué pour garder l'interface propre.
     ocrTextEl.textContent=text;
-    ocrTextEl.style.display="block";
+    ocrTextEl.style.display="none";
     detectedPlate=detectPlateValues(text);
     showDetected();
     if(detectedPlate.current!==null || detectedPlate.ucc!==null || detectedPlate.voltage!==null){
-      ocrStatusEl.textContent="Lecture terminée. Vérifie les valeurs détectées avant de les appliquer.";
+      ocrStatusEl.textContent="Lecture terminée. Les valeurs ci-dessous sont des propositions : vérifie la plaque avant application.";
     }else{
       ocrStatusEl.textContent="Texte lu, mais les valeurs utiles n’ont pas été identifiées automatiquement. Tu peux les saisir manuellement.";
     }
