@@ -21,6 +21,17 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
 .note{font-size:13px;color:#667085;line-height:1.45}
 .badge{display:inline-block;background:#dff1e3;color:#245c35;padding:7px 12px;border-radius:999px;font-weight:700;font-size:13px;margin-top:8px}
 .warn{color:#9b4b13;background:#fff4e8;border-left:4px solid #e57a2f}
+
+.photoBox{border:2px dashed #b9c6d6;border-radius:18px;padding:16px;background:#f8fafc}
+.photoActions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+button{appearance:none;border:0;border-radius:12px;padding:12px 16px;font-size:16px;font-weight:700;background:#1d6fa5;color:#fff;cursor:pointer}
+button.secondary{background:#e9eef5;color:#233044}
+button:disabled{opacity:.55;cursor:not-allowed}
+#platePreview{display:none;max-width:100%;max-height:420px;object-fit:contain;border-radius:14px;border:1px solid #d8e0ea;margin-top:12px}
+.ocrStatus{margin-top:10px;font-size:14px;color:#56657a}
+.ocrText{display:none;white-space:pre-wrap;max-height:220px;overflow:auto;background:#f5f8fb;border:1px solid #d8e0ea;border-radius:12px;padding:12px;margin-top:10px;font-size:12px}
+.detected{display:none;margin-top:12px;padding:12px;border-radius:14px;background:#eef7ff;border:1px solid #b9d8f2}
+.detected b{color:#17324a}
 @media(max-width:700px){.grid{grid-template-columns:1fr 1fr}.value{font-size:42px}}
 </style>
 </head>
@@ -37,6 +48,18 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
 </div>
 
 <div class="card" id="transformerCard" style="display:none">
+<div class="photoBox">
+<label for="platePhoto">📷 Photo de la plaque signalétique (facultatif)</label>
+<input id="platePhoto" type="file" accept="image/*" capture="environment">
+<img id="platePreview" alt="Aperçu de la plaque signalétique">
+<div class="photoActions">
+  <button type="button" id="ocrButton" class="secondary" disabled>Lire la plaque (OCR)</button>
+  <button type="button" id="applyDetected" disabled>Appliquer les valeurs détectées</button>
+</div>
+<div class="ocrStatus" id="ocrStatus">Ajoute une photo pour l’afficher. La lecture OCR reste à vérifier avant calcul.</div>
+<div class="detected" id="detectedValues"></div>
+<pre class="ocrText" id="ocrText"></pre>
+</div>
 <div class="grid">
 <div><label for="secondaryCurrent">Courant secondaire (A)</label><input id="secondaryCurrent" type="number" min="1" step="0.01" value="1374.64"></div>
 <div><label for="uccPercent">Tension de court-circuit Ucc (%)</label><input id="uccPercent" type="number" min="0.01" step="0.01" value="6"></div>
@@ -89,6 +112,7 @@ L’utilisateur reste responsable de l’interprétation et de l’utilisation d
 </div>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 (function(){
 "use strict";
@@ -192,7 +216,147 @@ var sectionEl=document.getElementById("section"),
     transformerCard=document.getElementById("transformerCard"),
     secondaryCurrentEl=document.getElementById("secondaryCurrent"),
     uccPercentEl=document.getElementById("uccPercent"),
-    transformerIccEl=document.getElementById("transformerIcc");
+    transformerIccEl=document.getElementById("transformerIcc"),
+    transformerVoltageEl=document.getElementById("transformerVoltage"),
+    platePhotoEl=document.getElementById("platePhoto"),
+    platePreviewEl=document.getElementById("platePreview"),
+    ocrButtonEl=document.getElementById("ocrButton"),
+    applyDetectedEl=document.getElementById("applyDetected"),
+    ocrStatusEl=document.getElementById("ocrStatus"),
+    ocrTextEl=document.getElementById("ocrText"),
+    detectedValuesEl=document.getElementById("detectedValues");
+
+
+var detectedPlate={current:null,ucc:null,voltage:null};
+
+function parseNumberFR(s){
+  if(!s) return null;
+  s=String(s).replace(/\s/g,"").replace(",",".").replace(/[^0-9.\-]/g,"");
+  var n=Number(s);
+  return isFinite(n)?n:null;
+}
+
+function findValueNear(lines, patterns, unitPattern){
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i];
+    if(patterns.some(function(p){return p.test(line);})){
+      var block=line+" "+(lines[i+1]||"")+" "+(lines[i-1]||"");
+      var m=block.match(unitPattern);
+      if(m) return parseNumberFR(m[1]);
+    }
+  }
+  return null;
+}
+
+function detectPlateValues(text){
+  var lines=text.split(/\r?\n/).map(function(x){return x.trim();}).filter(Boolean);
+  var current=findValueNear(
+    lines,
+    [/NOMINAL\s*CURRENT/i,/CURRENT\s*NOMINAL/i,/COURANT\s*NOMINAL/i],
+    /(\d+(?:[.,]\d+)?)\s*A\b/i
+  );
+  var ucc=findValueNear(
+    lines,
+    [/IMPEDANCE/i,/UCC/i,/UK\b/i,/SHORT\s*CIRCUIT/i,/COURT[-\s]*CIRCUIT/i],
+    /(\d+(?:[.,]\d+)?)\s*%/
+  );
+  var voltage=findValueNear(
+    lines,
+    [/LV\s*\(?V\)?/i,/SECONDARY/i,/TENSION\s*SECONDAIRE/i],
+    /(\d+(?:[.,]\d+)?)\s*V\b/i
+  );
+
+  // Fallback prudent : une ligne contenant clairement "420 V", "400 V", etc.
+  if(voltage===null){
+    for(var i=0;i<lines.length;i++){
+      if(/LV|SECONDARY|SECONDAIRE/i.test(lines[i])){
+        var mv=lines[i].match(/(\d{2,4}(?:[.,]\d+)?)\s*V\b/i);
+        if(mv){voltage=parseNumberFR(mv[1]);break;}
+      }
+    }
+  }
+  return {current:current,ucc:ucc,voltage:voltage};
+}
+
+function showDetected(){
+  var parts=[];
+  if(detectedPlate.current!==null) parts.push("Courant secondaire : <b>"+detectedPlate.current.toLocaleString("fr-BE",{maximumFractionDigits:2})+" A</b>");
+  if(detectedPlate.ucc!==null) parts.push("Ucc : <b>"+detectedPlate.ucc.toLocaleString("fr-BE",{maximumFractionDigits:2})+" %</b>");
+  if(detectedPlate.voltage!==null) parts.push("Tension secondaire : <b>"+detectedPlate.voltage.toLocaleString("fr-BE",{maximumFractionDigits:0})+" V</b>");
+  if(parts.length){
+    detectedValuesEl.style.display="block";
+    detectedValuesEl.innerHTML="<b>Valeurs détectées — à confirmer :</b><br>"+parts.join("<br>");
+    applyDetectedEl.disabled=false;
+  }else{
+    detectedValuesEl.style.display="none";
+    applyDetectedEl.disabled=true;
+  }
+}
+
+platePhotoEl.addEventListener("change",function(){
+  var file=platePhotoEl.files && platePhotoEl.files[0];
+  detectedPlate={current:null,ucc:null,voltage:null};
+  detectedValuesEl.style.display="none";
+  applyDetectedEl.disabled=true;
+  ocrTextEl.style.display="none";
+  if(!file){
+    platePreviewEl.style.display="none";
+    ocrButtonEl.disabled=true;
+    ocrStatusEl.textContent="Ajoute une photo pour l’afficher. La lecture OCR reste à vérifier avant calcul.";
+    return;
+  }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    platePreviewEl.src=e.target.result;
+    platePreviewEl.style.display="block";
+    ocrButtonEl.disabled=false;
+    ocrStatusEl.textContent="Photo chargée. Tu peux lancer la lecture OCR.";
+  };
+  reader.readAsDataURL(file);
+});
+
+ocrButtonEl.addEventListener("click",async function(){
+  if(!platePreviewEl.src || !window.Tesseract){
+    ocrStatusEl.textContent="OCR indisponible. Vérifie ta connexion internet puis réessaie.";
+    return;
+  }
+  try{
+    ocrButtonEl.disabled=true;
+    applyDetectedEl.disabled=true;
+    ocrStatusEl.textContent="Lecture de la plaque en cours…";
+    var result=await Tesseract.recognize(platePreviewEl.src,"eng+fra",{
+      logger:function(m){
+        if(m.status==="recognizing text" && typeof m.progress==="number"){
+          ocrStatusEl.textContent="Lecture de la plaque… "+Math.round(m.progress*100)+" %";
+        }
+      }
+    });
+    var text=(result && result.data && result.data.text)||"";
+    ocrTextEl.textContent=text;
+    ocrTextEl.style.display="block";
+    detectedPlate=detectPlateValues(text);
+    showDetected();
+    if(detectedPlate.current!==null || detectedPlate.ucc!==null || detectedPlate.voltage!==null){
+      ocrStatusEl.textContent="Lecture terminée. Vérifie les valeurs détectées avant de les appliquer.";
+    }else{
+      ocrStatusEl.textContent="Texte lu, mais les valeurs utiles n’ont pas été identifiées automatiquement. Tu peux les saisir manuellement.";
+    }
+  }catch(err){
+    console.error(err);
+    ocrStatusEl.textContent="La lecture OCR a échoué. Essaie une photo plus nette et bien cadrée.";
+  }finally{
+    ocrButtonEl.disabled=false;
+  }
+});
+
+applyDetectedEl.addEventListener("click",function(){
+  if(detectedPlate.current!==null) secondaryCurrentEl.value=detectedPlate.current;
+  if(detectedPlate.ucc!==null) uccPercentEl.value=detectedPlate.ucc;
+  if(detectedPlate.voltage!==null) transformerVoltageEl.value=detectedPlate.voltage;
+  refreshSource();
+  update();
+  ocrStatusEl.textContent="Valeurs détectées appliquées. Vérifie-les sur la plaque avant utilisation.";
+});
 
 sections.forEach(function(s){
   var o=document.createElement("option");
@@ -248,6 +412,7 @@ function refreshSource(){
 sourceModeEl.addEventListener("change",function(){refreshSource();update();});
 secondaryCurrentEl.addEventListener("input",function(){refreshSource();update();});
 uccPercentEl.addEventListener("input",function(){refreshSource();update();});
+transformerVoltageEl.addEventListener("input",function(){update();});
 
 function fmt(v){
   return Number(v).toLocaleString("fr-BE",{minimumFractionDigits:1,maximumFractionDigits:1});
