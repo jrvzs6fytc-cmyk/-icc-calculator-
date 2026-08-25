@@ -237,84 +237,125 @@ function parseNumberFR(s){
   return isFinite(n)?n:null;
 }
 
-function extractNumbersWithUnit(line, unit){
-  var re=new RegExp("(\\d+(?:[.,]\\d+)?)\\s*"+unit+"\\b","gi"), out=[], m;
-  while((m=re.exec(line))!==null) out.push(parseNumberFR(m[1]));
-  return out.filter(function(v){return v!==null;});
+function numFromText(s){
+  var m=String(s||"").match(/(\d+(?:[.,]\d+)?)/);
+  return m ? parseNumberFR(m[1]) : null;
 }
 
-function detectPlateValues(text){
-  var lines=text.split(/\r?\n/).map(function(x){return x.trim().replace(/\s+/g," ");}).filter(Boolean);
-  var result={current:null,ucc:null,voltage:null,power:null,confidence:0};
+function lineText(line){
+  if(!line) return "";
+  if(line.text) return line.text;
+  if(line.words) return line.words.map(function(w){return w.text;}).join(" ");
+  return "";
+}
+
+function bboxCenter(item){
+  var b=item && item.bbox;
+  if(!b) return null;
+  return (b.x0+b.x1)/2;
+}
+
+function detectPlateValues(text, data){
+  var result={current:null,ucc:null,voltage:null,power:null,confidence:0,reason:""};
+  var lines=(data && data.lines && data.lines.length ? data.lines : [])
+    .map(function(l){return {text:lineText(l).trim().replace(/\s+/g," "), raw:l};})
+    .filter(function(l){return l.text;});
+
+  // --- 1. Repérer les colonnes HV / LV dans la géométrie OCR ---
+  var words=(data && data.words) ? data.words : [];
+  var hvX=null, lvX=null;
+  words.forEach(function(w){
+    var t=String(w.text||"").toUpperCase().replace(/[^A-Z]/g,"");
+    var x=bboxCenter(w);
+    if(x===null) return;
+    if((t==="HV" || t==="HT" || t==="PRIMARY") && hvX===null) hvX=x;
+    if((t==="LV" || t==="BT" || t==="SECONDARY") && lvX===null) lvX=x;
+  });
+
+  // --- 2. Extraire les courants nominal primaire/secondaire par POSITION ---
+  // On ne choisit plus "la plus grande valeur". Si la plaque est structurée HV/LV,
+  // chaque valeur est associée à la colonne la plus proche.
   var currentCandidates=[];
+  words.forEach(function(w){
+    var raw=String(w.text||"");
+    var v=numFromText(raw);
+    var x=bboxCenter(w);
+    if(v===null || x===null) return;
 
-  // 1) Cherche explicitement une ligne de courant nominal.
-  // Si deux courants sont présents, on considère généralement la valeur la plus élevée
-  // comme le côté secondaire BT, mais on ne l'applique que comme proposition.
-  for(var i=0;i<lines.length;i++){
-    var line=lines[i];
-    if(/NOMINAL\s*CURRENT|COURANT\s*NOMINAL|CURRENT\s*NOMINAL/i.test(line)){
-      var nums=extractNumbersWithUnit(line,"A");
-      nums.forEach(function(n){ currentCandidates.push({value:n,line:i,context:line}); });
-      // Certaines plaques mettent les valeurs sur la ligne suivante.
-      if(!nums.length){
-        var near=(lines[i+1]||"")+" "+(lines[i+2]||"");
-        extractNumbersWithUnit(near,"A").forEach(function(n){currentCandidates.push({value:n,line:i+1,context:near});});
+    // un courant nominal secondaire de transfo est souvent dans cette plage.
+    // On garde large pour éviter de rejeter les gros transformateurs.
+    if(v>0 && v<20000){
+      var distLV=(lvX===null)?Infinity:Math.abs(x-lvX);
+      var distHV=(hvX===null)?Infinity:Math.abs(x-hvX);
+      if(distLV<distHV && distLV<350) currentCandidates.push({value:v,score:4,source:"colonne LV"});
+      else if(distHV<distLV && distHV<350) currentCandidates.push({value:v,score:-4,source:"colonne HV"});
+    }
+  });
+
+  // Fallback texte : seulement si la géométrie ne permet pas de conclure.
+  if(!currentCandidates.some(function(c){return c.score>0;})){
+    for(var i=0;i<lines.length;i++){
+      var t=lines[i].text;
+      if(/LV|BT|SECONDARY|SECONDAIRE/i.test(t)){
+        var near=t+" "+(lines[i+1] ? lines[i+1].text : "");
+        var ms=near.match(/(\d+(?:[.,]\d+)?)\s*A\b/ig)||[];
+        ms.forEach(function(m){
+          var v=numFromText(m);
+          if(v!==null) currentCandidates.push({value:v,score:3,source:"ligne LV"});
+        });
       }
     }
   }
 
-  // 2) Recherche alternative : lignes contenant clairement LV/BT + A.
+  var secondary=currentCandidates
+    .filter(function(c){return c.score>0;})
+    .sort(function(a,b){return b.score-a.score;});
+
+  if(secondary.length){
+    // Dédupliquer les lectures OCR répétées puis prendre la meilleure candidate.
+    var seen={};
+    secondary=secondary.filter(function(c){
+      var k=c.value.toFixed(3);
+      if(seen[k]) return false;
+      seen[k]=true; return true;
+    });
+    result.current=secondary[0].value;
+    result.confidence+=3;
+    result.reason="courant associé au côté BT/LV";
+  }
+
+  // --- 3. Ucc / Uk / Impedance : uniquement près du libellé ---
   for(var j=0;j<lines.length;j++){
-    var l=lines[j];
-    if(/\b(LV|BT|SECONDARY|SECONDAIRE)\b/i.test(l)){
-      extractNumbersWithUnit(l,"A").forEach(function(n){
-        currentCandidates.push({value:n,line:j,context:l,secondaryHint:true});
-      });
-      var near2=(lines[j+1]||"");
-      extractNumbersWithUnit(near2,"A").forEach(function(n){
-        currentCandidates.push({value:n,line:j+1,context:l+" "+near2,secondaryHint:true});
-      });
-    }
-  }
-
-  // Priorité : candidat avec indice secondaire, sinon courant nominal le plus élevé.
-  if(currentCandidates.length){
-    var hinted=currentCandidates.filter(function(c){return c.secondaryHint;});
-    var pool=hinted.length?hinted:currentCandidates;
-    pool.sort(function(a,b){return b.value-a.value;});
-    result.current=pool[0].value;
-    result.confidence += hinted.length?2:1;
-  }
-
-  // 3) Ucc / Uk / impedance : priorité à la ligne contenant IMPEDANCE.
-  for(var k=0;k<lines.length;k++){
-    var li=lines[k];
-    if(/IMPEDANCE|SHORT\s*CIRCUIT\s*VOLTAGE|COURT[-\s]*CIRCUIT|UCC|U[Kk]\s*%?|\bUK\b/i.test(li)){
-      var block=li+" "+(lines[k+1]||"");
-      var m=block.match(/(\d+(?:[.,]\d+)?)\s*%/);
-      if(m){
-        var u=parseNumberFR(m[1]);
-        if(u!==null && u>0 && u<=25){ result.ucc=u; result.confidence+=2; break; }
+    var t=lines[j].text;
+    if(/IMPEDANCE|UCC|SHORT\s*CIRCUIT|COURT[-\s]*CIRCUIT|\bUK\b/i.test(t)){
+      var block=t+" "+(lines[j+1]?lines[j+1].text:"")+" "+(lines[j+2]?lines[j+2].text:"");
+      var pm=block.match(/(\d+(?:[.,]\d+)?)\s*%/);
+      if(pm){
+        var u=parseNumberFR(pm[1]);
+        if(u!==null && u>0 && u<=25){
+          result.ucc=u; result.confidence+=3; break;
+        }
       }
     }
   }
 
-  // 4) Tension secondaire : ligne LV / BT / SECONDARY, priorité aux tensions réalistes BT.
-  for(var v=0;v<lines.length;v++){
-    var lvline=lines[v];
-    if(/\b(LV|BT|SECONDARY|SECONDAIRE)\b/i.test(lvline)){
-      var vals=extractNumbersWithUnit(lvline,"V");
-      if(!vals.length) vals=extractNumbersWithUnit((lines[v+1]||""),"V");
-      var realistic=vals.filter(function(n){return n>=100 && n<=1000;});
-      if(realistic.length){ result.voltage=realistic[0]; result.confidence+=1; break; }
+  // --- 4. Tension secondaire : près de LV/BT ---
+  for(var k=0;k<lines.length;k++){
+    var lt=lines[k].text;
+    if(/LV|BT|SECONDARY|SECONDAIRE/i.test(lt)){
+      var block2=lt+" "+(lines[k+1]?lines[k+1].text:"");
+      var vm=block2.match(/(\d{2,4}(?:[.,]\d+)?)\s*V\b/i);
+      if(vm){
+        var vv=parseNumberFR(vm[1]);
+        if(vv>=100 && vv<=1000){ result.voltage=vv; result.confidence+=2; break; }
+      }
     }
   }
 
-  // 5) Puissance transformateur.
+  // --- 5. Puissance ---
   for(var p=0;p<lines.length;p++){
-    var pm=(lines[p]+" "+(lines[p+1]||"")).match(/(\d+(?:[.,]\d+)?)\s*kVA\b/i);
-    if(pm){ result.power=parseNumberFR(pm[1]); break; }
+    var km=(lines[p].text+" "+(lines[p+1]?lines[p+1].text:"")).match(/(\d+(?:[.,]\d+)?)\s*kVA\b/i);
+    if(km){ result.power=parseNumberFR(km[1]); break; }
   }
 
   return result;
@@ -324,13 +365,16 @@ function showDetected(){
   var parts=[];
   if(detectedPlate.power!==null) parts.push("Puissance : <b>"+detectedPlate.power.toLocaleString("fr-BE",{maximumFractionDigits:2})+" kVA</b>");
   if(detectedPlate.voltage!==null) parts.push("Tension secondaire : <b>"+detectedPlate.voltage.toLocaleString("fr-BE",{maximumFractionDigits:0})+" V</b>");
-  if(detectedPlate.current!==null) parts.push("Courant secondaire proposé : <b>"+detectedPlate.current.toLocaleString("fr-BE",{maximumFractionDigits:2})+" A</b>");
+  if(detectedPlate.current!==null) parts.push("Courant secondaire (BT/LV) : <b>"+detectedPlate.current.toLocaleString("fr-BE",{maximumFractionDigits:2})+" A</b>");
   if(detectedPlate.ucc!==null) parts.push("Ucc / Uk : <b>"+detectedPlate.ucc.toLocaleString("fr-BE",{maximumFractionDigits:2})+" %</b>");
 
+  var ready=(detectedPlate.current!==null && detectedPlate.ucc!==null);
   if(parts.length){
     detectedValuesEl.style.display="block";
-    detectedValuesEl.innerHTML="<b>Valeurs détectées — à vérifier avant application :</b><br>"+parts.join("<br>");
-    applyDetectedEl.disabled=false;
+    detectedValuesEl.innerHTML="<b>Valeurs détectées — à vérifier sur la plaque :</b><br>"+parts.join("<br>")+
+      (ready ? "<br><b>Icc théorique : "+fmt((detectedPlate.current/detectedPlate.ucc)*100/1000)+" kA</b>" :
+      "<br><span class='note'>Détection incomplète : aucune valeur ne sera appliquée automatiquement.</span>");
+    applyDetectedEl.disabled=!ready;
   }else{
     detectedValuesEl.style.display="none";
     applyDetectedEl.disabled=true;
@@ -379,10 +423,10 @@ ocrButtonEl.addEventListener("click",async function(){
     // Le texte OCR brut est volontairement masqué pour garder l'interface propre.
     ocrTextEl.textContent=text;
     ocrTextEl.style.display="none";
-    detectedPlate=detectPlateValues(text);
+    detectedPlate=detectPlateValues(text, result.data);
     showDetected();
     if(detectedPlate.current!==null || detectedPlate.ucc!==null || detectedPlate.voltage!==null){
-      ocrStatusEl.textContent="Lecture terminée. Les valeurs ci-dessous sont des propositions : vérifie la plaque avant application.";
+      ocrStatusEl.textContent=(detectedPlate.current!==null && detectedPlate.ucc!==null) ? "Lecture terminée. Vérifie les valeurs puis applique-les." : "Lecture partielle : aucune application automatique tant que le courant secondaire et Ucc ne sont pas clairement détectés.";
     }else{
       ocrStatusEl.textContent="Texte lu, mais les valeurs utiles n’ont pas été identifiées automatiquement. Tu peux les saisir manuellement.";
     }
@@ -395,8 +439,12 @@ ocrButtonEl.addEventListener("click",async function(){
 });
 
 applyDetectedEl.addEventListener("click",function(){
-  if(detectedPlate.current!==null) secondaryCurrentEl.value=detectedPlate.current;
-  if(detectedPlate.ucc!==null) uccPercentEl.value=detectedPlate.ucc;
+  if(detectedPlate.current===null || detectedPlate.ucc===null){
+    ocrStatusEl.textContent="Application refusée : courant secondaire et Ucc doivent être clairement détectés.";
+    return;
+  }
+  secondaryCurrentEl.value=detectedPlate.current;
+  uccPercentEl.value=detectedPlate.ucc;
   if(detectedPlate.voltage!==null) transformerVoltageEl.value=detectedPlate.voltage;
   refreshSource();
   update();
