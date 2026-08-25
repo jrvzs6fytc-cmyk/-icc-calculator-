@@ -33,7 +33,7 @@ select,input{width:100%;font-size:20px;padding:14px;border:1px solid #ccd5e0;bor
   <option value="230">3×230 V</option>
   <option value="400" selected>3N~400 V</option>
   <option value="420">3N~420 V</option>
-</select>
+  </select>
 <div class="note" id="voltageNote">La tension choisie est utilisée pour le calcul automatique du courant secondaire du transformateur.</div>
 </div>
 
@@ -257,12 +257,12 @@ function refreshVoltage(){
   transformerVoltageDisplayEl.textContent=voltage+" V";
   var current=calculateSecondaryCurrent();
   secondaryCurrentEl.value=current!==null?current.toFixed(2):"";
-  if(voltage===400){
-    voltageNoteEl.textContent="3N~400 V : tension utilisée directement pour le calcul du transformateur et référence nominale de la table G39 intégrée.";
-  }else if(voltage===230){
-    voltageNoteEl.textContent="3×230 V : la tension 230 V est utilisée directement pour le calcul du transformateur. La table G39 reste une table de référence distincte : aucune conversion supplémentaire n’est appliquée ici sans validation.";
+  if(voltage===230){
+    voltageNoteEl.textContent="3×230 V : la tension 230 V est utilisée directement pour le calcul du transformateur.";
+  }else if(voltage===400){
+    voltageNoteEl.textContent="3N~400 V : la tension 400 V est utilisée directement pour le calcul du transformateur.";
   }else{
-    voltageNoteEl.textContent="3N~420 V : la tension 420 V est utilisée directement pour le calcul du transformateur. La table G39 intégrée n’est pas automatiquement recalibrée à 420 V.";
+    voltageNoteEl.textContent="3N~420 V : la tension 420 V est utilisée directement pour le calcul du transformateur.";
   }
 }
 
@@ -386,7 +386,7 @@ function update(){
         : "Icc amont "+fmt(r.upstream)+" kA";
       detailsEl.textContent=(materialEl.value==="Cu"?"Cuivre":"Aluminium")+" • "+sectionEl.value+" mm² • "+fmt(r.length)+" m • "+sourceText;
       badge.textContent="Interpolation G39";
-      statusEl.textContent="Valeur interpolée entre les points disponibles des tables G39 : pas de palier artificiel entre deux longueurs ou deux Icc. Référence intégrée : G39 230/400 V ; les tensions 230 V et 420 V ne sont pas automatiquement converties pour la table." ;
+      statusEl.textContent="Valeur interpolée entre les points disponibles des tables G39 : pas de palier artificiel entre deux longueurs ou deux Icc. Référence intégrée : G39 230/400 V. Le choix de tension agit sur le calcul du transformateur." ;
     }
   }
   buildMatrix();
